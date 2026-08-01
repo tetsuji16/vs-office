@@ -1,0 +1,6 @@
+node_modules/
+*.vsix
+.office-lite-backups/
+.DS_Store
+*.log
+assets/*-chroma.png

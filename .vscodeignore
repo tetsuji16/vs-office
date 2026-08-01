@@ -1,0 +1,7 @@
+.git/**
+.gitignore
+.vscode/**
+test/**
+*.vsix
+assets/*-chroma.png
+node_modules/@types/**

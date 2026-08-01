@@ -1,0 +1,76 @@
+{
+  "name": "office-lite-safe",
+  "displayName": "Office Lite Safe",
+  "icon": "assets/vs-office-icon.png",
+  "description": "Lightweight, conservative DOCX/PPTX/XLSX viewer and safe-copy editor.",
+  "version": "0.2.0",
+  "publisher": "local",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tetsuji16/vs-office.git"
+  },
+  "homepage": "https://github.com/tetsuji16/vs-office#readme",
+  "bugs": {
+    "url": "https://github.com/tetsuji16/vs-office/issues"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "activationEvents": [
+    "onCustomEditor:officeLiteSafe.editor"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "officeLiteSafe.editor",
+        "displayName": "Office Lite Safe",
+        "selector": [
+          {
+            "filenamePattern": "*.docx"
+          },
+          {
+            "filenamePattern": "*.pptx"
+          },
+          {
+            "filenamePattern": "*.xlsx"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "officeLiteSafe.openSafely",
+        "title": "Office Lite Safe: Open Safely"
+      }
+    ],
+    "configuration": {
+      "title": "Office Lite Safe",
+      "properties": {
+        "officeLiteSafe.createBackupOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Create a recoverable copy in .office-lite-backups before overwriting an Office file."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check extension.js && node --check src/office-package.js"
+  },
+  "dependencies": {
+    "docx-preview": "^0.3.7",
+    "jszip": "^3.10.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.9.2"
+  }
+}
