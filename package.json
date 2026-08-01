@@ -2,8 +2,8 @@
   "name": "vs-office-lite",
   "displayName": "VS Office - Lightweight Editor",
   "icon": "assets/vs-office-icon.png",
-  "description": "Lightweight DOCX, PPTX and XLSX viewer with conservative in-place editing for VS Code.",
-  "version": "0.2.1",
+  "description": "Review and make focused edits to DOCX, PPTX and XLSX files in VS Code with conservative OOXML saving.",
+  "version": "0.2.2",
   "publisher": "tetsuji16",
   "license": "MIT",
   "sponsor": {
@@ -24,6 +24,10 @@
     "Other",
     "Visualization"
   ],
+  "galleryBanner": {
+    "color": "#07152f",
+    "theme": "dark"
+  },
   "keywords": [
     "office",
     "docx",

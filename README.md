@@ -1,26 +1,55 @@
 # VS Office - Lightweight Editor
 
-<p align="center"><img src="assets/vs-office-icon.png" width="160" alt="VS Office icon"></p>
+<p align="center">
+  <img src="assets/vs-office-hero.png" alt="VS Office - Lightweight Editor for DOCX, PPTX and XLSX" width="100%">
+</p>
 
-VS Office is a lightweight Visual Studio Code extension for viewing `.docx`, `.pptx`, and `.xlsx` files and making carefully limited edits without rebuilding the entire Office document.
+Open and make focused edits to Microsoft Office Open XML files without leaving Visual Studio Code.
 
-## Safety principles
+VS Office is designed for quick reviews and small corrections in `.docx`, `.pptx`, and `.xlsx` files. Instead of rebuilding the entire document, it changes only the selected OOXML text or cell data and verifies that unrelated package parts remain untouched.
 
-- Save changes to the original file with standard `Ctrl+S`, or choose Save As when you need a separate copy.
-- Write to a temporary file in the same directory and replace the original atomically only after validation succeeds.
-- Create a recoverable copy in `.vs-office-backups` before overwriting by default. This can be disabled in Settings.
-- Modify only the targeted OOXML text or cell data. Themes, images, masters, styles, formulas, embedded files, and other untouched package parts are not regenerated.
-- Recheck ZIP CRC values after saving and verify that every untouched OOXML part remains byte-for-byte identical using SHA-256 hashes. Saving fails if validation detects a mismatch.
-- Open digitally signed or encrypted files in read-only mode.
-- Keep formula cells read-only.
+## Why VS Office?
 
-## Supported features
+- **Stay in your editor:** inspect supported Office files directly in Visual Studio Code.
+- **Make focused corrections:** edit existing Word text runs, PowerPoint text runs, and non-formula Excel cells.
+- **Preserve unrelated content:** do not regenerate themes, styles, images, slide masters, formulas, embedded files, or other untouched OOXML parts.
+- **Validate every save:** recheck ZIP CRC values and compare untouched parts with SHA-256 hashes before accepting the result.
+- **Recover when needed:** create a backup before overwriting by default, and support both standard Save and Save As.
 
-| Format | Viewing | Conservative editing |
+## Format support
+
+| Format | Preview | Focused editing |
 | --- | --- | --- |
-| DOCX | Page preview powered by `docx-preview`, plus a text list | Existing `w:t` text runs |
-| PPTX | Structural view of slide order, text, and image counts | Existing `a:t` text runs |
-| XLSX | Lightweight grid of up to 200 rows by 50 columns | Non-formula cells; shared-string cells are converted individually to `inlineStr` |
+| DOCX | Page preview powered by `docx-preview`, plus an editable text outline | Existing `w:t` text runs |
+| PPTX | Lightweight structural view of slide order, text, and image counts | Existing `a:t` text runs |
+| XLSX | Spreadsheet grid of up to 200 rows by 50 columns | Non-formula cells; shared-string cells are converted individually to `inlineStr` |
+
+## Save protection
+
+VS Office uses a conservative save pipeline:
+
+1. Apply only the requested text or cell changes to the OOXML package.
+2. Write the result to a temporary file in the same directory.
+3. Validate ZIP integrity and verify every untouched package part with SHA-256.
+4. Create a recoverable copy in `.vs-office-backups` when backups are enabled.
+5. Replace the original atomically only after validation succeeds.
+
+Digitally signed and encrypted packages open in read-only mode. Formula cells are also read-only.
+
+## Getting started
+
+1. Install **VS Office - Lightweight Editor** from the Visual Studio Marketplace.
+2. Open a `.docx`, `.pptx`, or `.xlsx` file in Visual Studio Code.
+3. Review the preview or grid and edit a supported text or cell value.
+4. Press `Ctrl+S` to save, or use **Save As** to create a separate file.
+
+Automatic backups are enabled by default. Change `vsOffice.createBackupOnSave` in Visual Studio Code Settings if required.
+
+## Important limitations
+
+VS Office is a lightweight editor, not a replacement rendering engine for Microsoft Word, PowerPoint, or Excel. Browser HTML and Microsoft Office use different text-layout engines, so pixel-perfect preview parity cannot be guaranteed. Editing text can cause normal line wrapping, pagination, or slide reflow when the file is reopened in Microsoft Office.
+
+The extension is designed to preserve unrelated OOXML content and layout data, but final deliverables should always be verified in Microsoft Office.
 
 ## Development
 
@@ -30,10 +59,6 @@ npm test
 ```
 
 Open this folder in Visual Studio Code and press `F5` to start an Extension Development Host.
-
-## Important limitations
-
-Browser HTML and Microsoft Office use different text layout engines, so pixel-perfect preview parity cannot be guaranteed. Editing text can also cause normal line wrapping or page and slide reflow when the document is reopened in Word or PowerPoint. VS Office is designed to preserve all unrelated layout information and package content despite those unavoidable text-layout changes. Always verify final deliverables in Microsoft Office.
 
 ## Open-source components
 
