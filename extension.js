@@ -16,7 +16,7 @@ function nonce() {
   return value;
 }
 
-class OfficeLiteDocument {
+class VsOfficeDocument {
   constructor(uri, officePackage) {
     this.uri = uri;
     this.officePackage = officePackage;
@@ -29,7 +29,7 @@ class OfficeLiteDocument {
   }
 }
 
-class OfficeLiteProvider {
+class VsOfficeProvider {
   constructor(context) {
     this.context = context;
     this.changeEmitter = new vscode.EventEmitter();
@@ -43,7 +43,7 @@ class OfficeLiteProvider {
     }
     const bytes = await vscode.workspace.fs.readFile(uri);
     const pkg = await OfficePackage.open(uri.fsPath, bytes);
-    return new OfficeLiteDocument(uri, pkg);
+    return new VsOfficeDocument(uri, pkg);
   }
 
   async resolveCustomEditor(document, webviewPanel) {
@@ -179,8 +179,8 @@ class OfficeLiteProvider {
           throw new OfficePackageError('ファイルが外部で変更されています。再読み込みするか「名前を付けて保存」を選んでください。');
         }
       }
-      if (overwriteOriginal && vscode.workspace.getConfiguration('officeLiteSafe').get('createBackupOnSave', true)) {
-        const backupDir = vscode.Uri.file(path.join(parsed.dir, '.office-lite-backups'));
+      if (overwriteOriginal && vscode.workspace.getConfiguration('vsOffice').get('createBackupOnSave', true)) {
+        const backupDir = vscode.Uri.file(path.join(parsed.dir, '.vs-office-backups'));
         await vscode.workspace.fs.createDirectory(backupDir);
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
         backup = vscode.Uri.joinPath(backupDir, `${parsed.name}.${stamp}${parsed.ext}`);
@@ -223,12 +223,12 @@ class OfficeLiteProvider {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="${csp}">
   <link rel="stylesheet" href="${styleUri}">
-  <title>Office Lite Safe</title>
+  <title>VS Office</title>
 </head>
 <body>
   <header id="toolbar">
     <div>
-      <strong id="filename">Office Lite Safe</strong>
+      <strong id="filename">VS Office</strong>
       <span id="status" class="badge">読み込み中</span>
     </div>
     <div class="actions">
@@ -256,18 +256,18 @@ class OfficeLiteProvider {
 }
 
 function activate(context) {
-  const provider = new OfficeLiteProvider(context);
+  const provider = new VsOfficeProvider(context);
   context.subscriptions.push(vscode.window.registerCustomEditorProvider(
-    'officeLiteSafe.editor',
+    'vsOffice.editor',
     provider,
     { supportsMultipleEditorsPerDocument: false, webviewOptions: { retainContextWhenHidden: true } },
   ));
-  context.subscriptions.push(vscode.commands.registerCommand('officeLiteSafe.openSafely', async () => {
+  context.subscriptions.push(vscode.commands.registerCommand('vsOffice.openOfficeFile', async () => {
     const files = await vscode.window.showOpenDialog({
       canSelectMany: false,
       filters: { 'Office Open XML': ['docx', 'pptx', 'xlsx'] },
     });
-    if (files?.[0]) await vscode.commands.executeCommand('vscode.openWith', files[0], 'officeLiteSafe.editor');
+    if (files?.[0]) await vscode.commands.executeCommand('vscode.openWith', files[0], 'vsOffice.editor');
   }));
 }
 

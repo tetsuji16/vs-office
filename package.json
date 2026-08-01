@@ -1,11 +1,14 @@
 {
-  "name": "office-lite-safe",
-  "displayName": "Office Lite Safe",
+  "name": "vs-office-lite",
+  "displayName": "VS Office",
   "icon": "assets/vs-office-icon.png",
-  "description": "Lightweight, conservative DOCX/PPTX/XLSX viewer and safe-copy editor.",
+  "description": "Lightweight DOCX, PPTX and XLSX viewer with conservative in-place editing for VS Code.",
   "version": "0.2.0",
-  "publisher": "local",
+  "publisher": "tetsuji16",
   "license": "MIT",
+  "sponsor": {
+    "url": "https://github.com/sponsors/tetsuji16"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tetsuji16/vs-office.git"
@@ -21,15 +24,27 @@
     "Other",
     "Visualization"
   ],
+  "keywords": [
+    "office",
+    "docx",
+    "pptx",
+    "xlsx",
+    "word",
+    "powerpoint",
+    "excel",
+    "viewer",
+    "editor",
+    "ooxml"
+  ],
   "activationEvents": [
-    "onCustomEditor:officeLiteSafe.editor"
+    "onCustomEditor:vsOffice.editor"
   ],
   "main": "./extension.js",
   "contributes": {
     "customEditors": [
       {
-        "viewType": "officeLiteSafe.editor",
-        "displayName": "Office Lite Safe",
+        "viewType": "vsOffice.editor",
+        "displayName": "VS Office",
         "selector": [
           {
             "filenamePattern": "*.docx"
@@ -46,22 +61,23 @@
     ],
     "commands": [
       {
-        "command": "officeLiteSafe.openSafely",
-        "title": "Office Lite Safe: Open Safely"
+        "command": "vsOffice.openOfficeFile",
+        "title": "VS Office: Open Office File"
       }
     ],
     "configuration": {
-      "title": "Office Lite Safe",
+      "title": "VS Office",
       "properties": {
-        "officeLiteSafe.createBackupOnSave": {
+        "vsOffice.createBackupOnSave": {
           "type": "boolean",
           "default": true,
-          "description": "Create a recoverable copy in .office-lite-backups before overwriting an Office file."
+          "description": "Create a recoverable copy in .vs-office-backups before overwriting an Office file."
         }
       }
     }
   },
   "scripts": {
+    "vscode:prepublish": "npm run check && npm test",
     "test": "node --test",
     "check": "node --check extension.js && node --check src/office-package.js"
   },

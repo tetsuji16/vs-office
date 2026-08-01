@@ -1,6 +1,6 @@
-# Office Lite Safe
+# VS Office
 
-<p align="center"><img src="assets/vs-office-icon.png" width="160" alt="Office Lite Safe icon"></p>
+<p align="center"><img src="assets/vs-office-icon.png" width="160" alt="VS Office icon"></p>
 
 VS Code 内で `.docx`、`.pptx`、`.xlsx` を軽量に閲覧し、安全範囲に限定して編集する拡張機能です。
 
@@ -8,7 +8,7 @@ VS Code 内で `.docx`、`.pptx`、`.xlsx` を軽量に閲覧し、安全範囲�
 
 - 通常の `Ctrl+S` で元ファイルへ保存できます。名前を付けて保存も選べます。
 - 保存時は同じフォルダーの一時ファイルへ書き、検証合格後に原子的に置換します。
-- 既定では上書き前のファイルを `.office-lite-backups` に退避します。設定で無効化できます。
+- 既定では上書き前のファイルを `.vs-office-backups` に退避します。設定で無効化できます。
 - OOXML パッケージ中の対象テキスト／セルだけを変更し、テーマ、画像、マスター、スタイル、数式、埋め込みなどは再生成しません。
 - 保存後にZIP CRCを再検査し、未編集パートが元データとSHA-256で一致することを確認します。不一致なら保存処理を失敗させます。
 - デジタル署名付き・暗号化ファイルは閲覧専用です。
