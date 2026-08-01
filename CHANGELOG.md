@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.2.2
+
+- Add a new product hero image for GitHub and the Visual Studio Marketplace.
+- Rewrite the product introduction around focused editing, format support, and save protection.
+- Add a dark Marketplace gallery banner that matches the product artwork.
+
 ## 0.2.1
 
 - Publish the Marketplace and GitHub introduction in English.
