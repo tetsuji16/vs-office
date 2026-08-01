@@ -1,6 +1,6 @@
 {
   "name": "vs-office-lite",
-  "displayName": "VS Office",
+  "displayName": "VS Office - Lightweight Editor",
   "icon": "assets/vs-office-icon.png",
   "description": "Lightweight DOCX, PPTX and XLSX viewer with conservative in-place editing for VS Code.",
   "version": "0.2.0",
