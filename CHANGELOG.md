@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.2.1
+
+- Publish the Marketplace and GitHub introduction in English.
+
 ## 0.2.0
 
 - Add lightweight DOCX page preview and conservative text editing.
