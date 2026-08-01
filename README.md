@@ -1,43 +1,43 @@
-# Office Lite Safe
+# VS Office - Lightweight Editor
 
-<p align="center"><img src="assets/vs-office-icon.png" width="160" alt="Office Lite Safe icon"></p>
+<p align="center"><img src="assets/vs-office-icon.png" width="160" alt="VS Office icon"></p>
 
-VS Code 内で `.docx`、`.pptx`、`.xlsx` を軽量に閲覧し、安全範囲に限定して編集する拡張機能です。
+VS Office is a lightweight Visual Studio Code extension for viewing `.docx`, `.pptx`, and `.xlsx` files and making carefully limited edits without rebuilding the entire Office document.
 
-## 設計原則
+## Safety principles
 
-- 通常の `Ctrl+S` で元ファイルへ保存できます。名前を付けて保存も選べます。
-- 保存時は同じフォルダーの一時ファイルへ書き、検証合格後に原子的に置換します。
-- 既定では上書き前のファイルを `.office-lite-backups` に退避します。設定で無効化できます。
-- OOXML パッケージ中の対象テキスト／セルだけを変更し、テーマ、画像、マスター、スタイル、数式、埋め込みなどは再生成しません。
-- 保存後にZIP CRCを再検査し、未編集パートが元データとSHA-256で一致することを確認します。不一致なら保存処理を失敗させます。
-- デジタル署名付き・暗号化ファイルは閲覧専用です。
-- 数式セルは閲覧専用です。
+- Save changes to the original file with standard `Ctrl+S`, or choose Save As when you need a separate copy.
+- Write to a temporary file in the same directory and replace the original atomically only after validation succeeds.
+- Create a recoverable copy in `.vs-office-backups` before overwriting by default. This can be disabled in Settings.
+- Modify only the targeted OOXML text or cell data. Themes, images, masters, styles, formulas, embedded files, and other untouched package parts are not regenerated.
+- Recheck ZIP CRC values after saving and verify that every untouched OOXML part remains byte-for-byte identical using SHA-256 hashes. Saving fails if validation detects a mismatch.
+- Open digitally signed or encrypted files in read-only mode.
+- Keep formula cells read-only.
 
-## 対応機能
+## Supported features
 
-| 形式 | 表示 | 保守的編集 |
+| Format | Viewing | Conservative editing |
 | --- | --- | --- |
-| DOCX | `docx-preview` によるページ表示＋テキスト一覧 | 既存の `w:t` テキスト断片 |
-| PPTX | スライド順・テキスト・画像数の構造表示 | 既存の `a:t` テキスト断片 |
-| XLSX | 最大200行×50列の軽量グリッド | 非数式セル。共有文字列は対象セルだけ `inlineStr` 化 |
+| DOCX | Page preview powered by `docx-preview`, plus a text list | Existing `w:t` text runs |
+| PPTX | Structural view of slide order, text, and image counts | Existing `a:t` text runs |
+| XLSX | Lightweight grid of up to 200 rows by 50 columns | Non-formula cells; shared-string cells are converted individually to `inlineStr` |
 
-## 開発
+## Development
 
 ```powershell
 npm install
 npm test
 ```
 
-VS Code でこのフォルダーを開き、`F5` で Extension Development Host を起動してください。
+Open this folder in Visual Studio Code and press `F5` to start an Extension Development Host.
 
-## 重要な制限
+## Important limitations
 
-ブラウザHTMLとMicrosoft Officeでは文字組みエンジンが異なるため、プレビューの完全一致は保証できません。また、文字を変更すればWord/PowerPoint側で通常の改行・ページ送り変化が起こり得ます。この拡張は、その不可避な変化以外のレイアウト情報を変更しないことを重視しています。最終成果物はMicrosoft Officeで確認してください。
+Browser HTML and Microsoft Office use different text layout engines, so pixel-perfect preview parity cannot be guaranteed. Editing text can also cause normal line wrapping or page and slide reflow when the document is reopened in Word or PowerPoint. VS Office is designed to preserve all unrelated layout information and package content despite those unavoidable text-layout changes. Always verify final deliverables in Microsoft Office.
 
-## 採用したOSS
+## Open-source components
 
-- [docxjs / docx-preview](https://github.com/VolodymyrBaydalka/docxjs) (Apache-2.0): DOCXのHTMLレンダリング。
-- [JSZip](https://github.com/Stuk/jszip) (MIT / GPLv3): OOXML ZIPコンテナの読み書きとCRC検証。
+- [docxjs / docx-preview](https://github.com/VolodymyrBaydalka/docxjs) (Apache-2.0) renders DOCX content as HTML.
+- [JSZip](https://github.com/Stuk/jszip) (MIT / GPLv3) reads and writes OOXML ZIP containers and validates CRC values.
 
-XLSXの調査では [SheetJS Community Edition](https://git.sheetjs.com/sheetjs/sheetjs) も検討しましたが、ワークブック全体を再生成すると未知機能やレイアウトを落とし得るため、保存処理には採用していません。PPTXjs系は表示実装が古く、忠実度を保証できないため、PPTXは構造ビューに限定しています。
+[SheetJS Community Edition](https://git.sheetjs.com/sheetjs/sheetjs) was evaluated for XLSX support. It is not used for saving because regenerating an entire workbook can discard unknown features or layout information. PPTXjs-based renderers were also evaluated, but the current PPTX implementation intentionally uses a structural view because those projects could not provide the required fidelity guarantees.
