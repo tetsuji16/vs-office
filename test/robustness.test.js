@@ -73,20 +73,17 @@ test('stageEdit enforces the per-edit size ceiling', () => {
   });
 });
 
-test('staging an edit for a non-existent node is ignored without corrupting the package', async () => {
+test('staging an edit for a non-existent node is rejected at save time (not silently ignored)', async () => {
   const original = await makeZip({
     '[Content_Types].xml': contentTypes,
     'word/document.xml': '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>One</w:t></w:r></w:p></w:body></w:document>',
   });
   const pkg = await OfficePackage.open('sample.docx', original);
-  // Stage an edit whose id claims ordinal 99, which does not exist.
+  // Stage an edit whose id claims ordinal 99, which does not exist. The id
+  // passes the format check but matches no real node, so the save must reject
+  // rather than report a misleading "success".
   pkg.stageEdit({ id: 'docx:99', value: 'ghost' });
-  // The unknown id is skipped during build; the real node stays untouched and
-  // export still succeeds (defence-in-depth: a bad id never corrupts output).
-  const result = await pkg.exportValidatedCopy();
-  const reopened = await JSZip.loadAsync(result.bytes, { checkCRC32: true });
-  const doc = await reopened.file('word/document.xml').async('string');
-  assert.ok(doc.includes('>One<'), 'the real text node was altered by a phantom edit');
+  await assert.rejects(() => pkg.exportValidatedCopy(), /編集対象が見つかりません/);
 });
 
 test('empty-string edit deletes text while preserving the run element', async () => {
