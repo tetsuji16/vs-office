@@ -73,6 +73,76 @@ function collectTextNodes(xml, tagName, part, prefix) {
   return nodes;
 }
 
+/**
+ * Distribute `text` across `lengths` runs, proportional to each run's original
+ * length, so that formatting on every run is preserved. The final run absorbs
+ * any rounding remainder. Empty runs stay empty.
+ */
+function splitProportional(text, lengths) {
+  if (lengths.length === 0) return [];
+  const total = lengths.reduce((a, b) => a + b, 0);
+  if (total === 0) return lengths.map(() => '');
+  const n = text.length;
+  let allocated = 0;
+  return lengths.map((len, i) => {
+    if (i === lengths.length - 1) return text.slice(allocated);
+    const share = Math.max(0, Math.round((n * len) / total));
+    const slice = text.slice(allocated, allocated + share);
+    allocated += slice.length;
+    return slice;
+  });
+}
+
+/**
+ * Group `w:t` runs into their enclosing `w:p` paragraphs. Each paragraph keeps
+ * the ids and original lengths of the runs it spans so an edit can be re-fanned
+ * back out without disturbing `w:rPr` (run formatting).
+ */
+function collectParagraphs(xml, part, prefix) {
+  const paragraphs = [];
+  const paraPattern = /<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g;
+  let paraMatch;
+  let ordinal = 0;
+  while ((paraMatch = paraPattern.exec(xml)) && paragraphs.length < MAX_TEXT_NODES) {
+    const inner = paraMatch[1];
+    const runs = collectTextNodes(inner, 'w:t', part, `${prefix}:p${ordinal}`);
+    if (runs.length === 0) {
+      paragraphs.push({ id: `${prefix}:p${ordinal}`, part, ordinal, text: '', tIds: [], tLengths: [] });
+      ordinal += 1;
+      continue;
+    }
+    paragraphs.push({
+      id: `${prefix}:p${ordinal}`,
+      part,
+      ordinal,
+      text: runs.map((r) => r.text).join(''),
+      tIds: runs.map((r) => r.id),
+      tLengths: runs.map((r) => r.text.length),
+    });
+    ordinal += 1;
+  }
+  return paragraphs;
+}
+
+/**
+ * Replace the text inside every `w:t` of a single paragraph block with the
+ * corresponding entry of `runValues`, preserving each run's open tag (and thus
+ * its `w:rPr` formatting). Used to apply a paragraph-level edit that was
+ * re-fanned across runs by `splitProportional`.
+ */
+function replaceTextNodesInBlock(block, runValues) {
+  let i = -1;
+  return block.replace(/(<w:t\b[^>]*>)([\s\S]*?)(<\/w:t>)/g, (all, open, old, close) => {
+    i += 1;
+    if (i >= runValues.length) return all;
+    const value = runValues[i];
+    const preserve = (/^\s|\s$/.test(value) && !/xml:space=/.test(open))
+      ? open.replace(/>$/, ' xml:space="preserve">')
+      : open;
+    return `${preserve}${escapeXml(value)}${close}`;
+  });
+}
+
 function resolveTarget(basePart, target) {
   if (target.startsWith('/')) return target.slice(1);
   return path.posix.normalize(path.posix.join(path.posix.dirname(basePart), target));
@@ -200,9 +270,18 @@ class OfficePackage {
     const part = 'word/document.xml';
     const xml = await this.readText(part);
     const nodes = collectTextNodes(xml, 'w:t', part, 'docx');
+    const paragraphs = collectParagraphs(xml, part, 'docx');
     return {
       items: nodes.map((node) => ({ ...node, value: this.edits.get(node.id) ?? node.text })),
-      summary: `${nodes.length} 個のテキスト断片`,
+      paragraphs: paragraphs.map((p) => ({
+        ...p,
+        value: this.edits.get(p.id) ?? p.text,
+        // Per-run edited values, re-fanned from the paragraph edit when present.
+        runValues: this.edits.has(p.id)
+          ? splitProportional(this.edits.get(p.id), p.tLengths)
+          : p.tIds.map((id) => this.edits.get(id) ?? (nodes.find((n) => n.id === id)?.text ?? '')),
+      })),
+      summary: `${nodes.length} 個のテキスト断片 / ${paragraphs.length} 段落`,
       fidelityPreview: true,
     };
   }
@@ -258,12 +337,13 @@ class OfficePackage {
         const body = cellMatch[4];
         const type = /\bt="([^"]+)"/.exec(attrs)?.[1] || 'n';
         const formula = /<f\b/.test(body);
+        const formulaText = (/<f\b[^>]*>([\s\S]*?)<\/f>/.exec(body)?.[1] ?? '').trim();
         const raw = /<v\b[^>]*>([\s\S]*?)<\/v>/.exec(body)?.[1] ?? '';
         const inline = Array.from(body.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g), (x) => x[1]).join('');
         let value = type === 's' ? (shared[Number(raw)] ?? '') : type === 'inlineStr' ? decodeXml(inline) : decodeXml(raw);
         const id = `xlsx:${sheetIndex}:${cellOrdinal}`;
         value = this.edits.get(id) ?? value;
-        cells.push({ id, part, ordinal: cellOrdinal, ref: cellMatch[2], type, formula, value });
+        cells.push({ id, part, ordinal: cellOrdinal, ref: cellMatch[2], type, formula, formulaText, value });
         cellOrdinal += 1;
         if (cells.length >= 20000) break;
       }
@@ -278,6 +358,18 @@ class OfficePackage {
     const model = await this.createViewModel();
     if (this.kind === 'docx') {
       let xml = await this.readText('word/document.xml');
+      // Paragraph-level edits are re-fanned across their runs, preserving each
+      // run's formatting (w:rPr). Apply these before individual w:t edits so the
+      // two edit granularities can coexist.
+      for (const para of model.paragraphs) {
+        if (!this.edits.has(para.id)) continue;
+        let pIdx = -1;
+        xml = xml.replace(/<w:p\b[^>]*>[\s\S]*?<\/w:p>/g, (block) => {
+          pIdx += 1;
+          if (pIdx !== para.ordinal) return block;
+          return replaceTextNodesInBlock(block, para.runValues);
+        });
+      }
       for (const item of model.items) {
         if (!this.edits.has(item.id)) continue;
         xml = replaceNthTextNode(xml, 'w:t', item.ordinal, this.edits.get(item.id));
@@ -373,4 +465,6 @@ module.exports = {
   MAX_FILE_BYTES,
   escapeXml,
   decodeXml,
+  splitProportional,
+  collectParagraphs,
 };

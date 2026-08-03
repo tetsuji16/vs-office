@@ -67,13 +67,33 @@
   function renderDocx() {
     tabs.hidden = false;
     outline.innerHTML = '';
-    outline.appendChild(text('h2', 'テキスト断片の安全編集'));
-    outline.appendChild(text('p', '書式・段落・画像には触れず、既存の w:t テキストだけを置換します。文字変更による通常の改行変化は起こり得ます。', 'muted'));
+    outline.appendChild(text('h2', '段落の安全編集'));
+    outline.appendChild(text('p', '書式（太字・斜体等）は各 run のまま保持し、テキストのみを段落単位で置換します。文字数に応じて run へ自動配分され、改行による通常の再配置は起こり得ます。', 'muted'));
     const list = document.createElement('div');
     list.className = 'edit-list';
-    model.items.forEach((item, i) => list.appendChild(editRow(item, `#${i + 1}`)));
+    model.paragraphs.forEach((para, i) => list.appendChild(editParagraph(para, `#${i + 1}`)));
     outline.appendChild(list);
     renderDocxPreview();
+  }
+
+  function editParagraph(para, label) {
+    const row = document.createElement('div');
+    row.className = 'edit-row';
+    row.appendChild(text('span', label, 'row-label'));
+    const input = document.createElement('input');
+    input.value = para.value;
+    input.disabled = !model.canEdit;
+    input.title = 'Enterで変更をステージします';
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && input.value !== para.value) {
+        vscode.postMessage({ type: 'stage-edit', edit: { id: para.id, value: input.value } });
+      }
+    });
+    input.addEventListener('change', () => {
+      if (input.value !== para.value) vscode.postMessage({ type: 'stage-edit', edit: { id: para.id, value: input.value } });
+    });
+    row.appendChild(input);
+    return row;
   }
 
   async function renderDocxPreview() {
@@ -105,7 +125,7 @@
     tabs.hidden = true;
     preview.innerHTML = '';
     outline.innerHTML = '';
-    const intro = text('p', '軽量構造ビューです。座標・テーマ・マスター・画像は変更せず、既存 a:t テキストだけを編集します。', 'muted');
+    const intro = text('p', '軽量構造ビューです。座標・テーマ・マスター・画像は変更せず、既存 a:t テキストだけを編集します。上段がスライド内テキストの視覚的プレビュー、下段が編集フィールドです。', 'muted');
     preview.appendChild(intro);
     const deck = document.createElement('div');
     deck.className = 'slides';
@@ -117,8 +137,20 @@
       head.appendChild(text('strong', `Slide ${slide.number}`));
       head.appendChild(text('span', `画像 ${slide.imageCount}`, 'muted'));
       card.appendChild(head);
-      if (!slide.items.length) card.appendChild(text('p', '（テキストなし）', 'muted'));
-      slide.items.forEach((item, i) => card.appendChild(editRow(item, `${i + 1}`)));
+      const previewBox = document.createElement('div');
+      previewBox.className = 'slide-preview';
+      if (!slide.items.length) previewBox.appendChild(text('p', '（テキストなし）', 'muted'));
+      slide.items.forEach((item) => {
+        const line = document.createElement('p');
+        line.className = 'slide-line';
+        line.textContent = item.value || ' ';
+        previewBox.appendChild(line);
+      });
+      card.appendChild(previewBox);
+      const list = document.createElement('div');
+      list.className = 'edit-list';
+      slide.items.forEach((item, i) => list.appendChild(editRow(item, `${i + 1}`)));
+      card.appendChild(list);
       deck.appendChild(card);
     });
     preview.appendChild(deck);
@@ -168,14 +200,24 @@
           const item = map.get(`${letters}${row}`);
           const td = document.createElement('td');
           if (item) {
-            const input = document.createElement('input');
-            input.value = item.value;
-            input.disabled = !model.canEdit || item.formula;
-            input.className = item.formula ? 'formula-cell' : '';
-            input.addEventListener('change', () => {
-              if (input.value !== item.value) vscode.postMessage({ type: 'stage-edit', edit: { id: item.id, value: input.value } });
-            });
-            td.appendChild(input);
+            if (item.formula) {
+              const input = document.createElement('input');
+              input.value = item.value;
+              input.disabled = true;
+              input.readOnly = true;
+              input.className = 'formula-cell';
+              input.title = item.formulaText ? `数式 (閲覧のみ): =${item.formulaText}` : '数式セルは閲覧のみです';
+              td.appendChild(input);
+              td.appendChild(text('span', 'ƒx', 'formula'));
+            } else {
+              const input = document.createElement('input');
+              input.value = item.value;
+              input.disabled = !model.canEdit;
+              input.addEventListener('change', () => {
+                if (input.value !== item.value) vscode.postMessage({ type: 'stage-edit', edit: { id: item.id, value: input.value } });
+              });
+              td.appendChild(input);
+            }
           }
           tr.appendChild(td);
         }
