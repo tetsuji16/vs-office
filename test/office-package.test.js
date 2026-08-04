@@ -70,8 +70,14 @@ test('XLSX converts a shared-string cell locally and refuses formula changes', a
 
   const pkg2 = await OfficePackage.open('sample.xlsx', original);
   const model2 = await pkg2.createViewModel();
-  pkg2.stageEdit({ id: model2.sheets[0].cells[1].id, value: '9' });
-  await assert.rejects(() => pkg2.exportValidatedCopy(), /数式セル B1/);
+  // Formula cells are now editable: editing B1 with a new formula rewrites <f>.
+  assert.equal(model2.sheets[0].cells[1].formula, true);
+  assert.equal(model2.sheets[0].cells[1].value, '=1+1');
+  pkg2.stageEdit({ id: model2.sheets[0].cells[1].id, value: '=2*3' });
+  const result2 = await pkg2.exportValidatedCopy();
+  const reopened2 = await JSZip.loadAsync(result2.bytes, { checkCRC32: true });
+  const sheet2 = await reopened2.file('xl/worksheets/sheet1.xml').async('string');
+  assert.match(sheet2, /<c r="B1"[^>]*><f>2\*3<\/f><\/c>/);
 });
 
 test('digitally signed packages are view-only', async () => {

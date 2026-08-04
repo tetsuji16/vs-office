@@ -152,7 +152,7 @@ test('XLSX numeric edit keeps a shared-string neighbour untouched', async () => 
   assert.ok(/B1[^>]*t="inlineStr"/.test(sheet), 'edited cell not converted to inlineStr');
 });
 
-test('XLSX formula cells expose the formula text for read-only display', async () => {
+test('XLSX formula cells expose the formula text and accept edits', async () => {
   const original = await makeZip({
     '[Content_Types].xml': contentTypes,
     'xl/workbook.xml': '<workbook xmlns:r="r"><sheets><sheet r:id="rId1" name="Data"/></sheets></workbook>',
@@ -165,10 +165,22 @@ test('XLSX formula cells expose the formula text for read-only display', async (
   const cell = model.sheets[0].cells[0];
   assert.equal(cell.formula, true);
   assert.equal(cell.formulaText, 'SUM(B1:B3)');
-  assert.equal(cell.value, '6');
-  // Formula cells must remain read-only (editing is refused by the save pipeline).
-  pkg.stageEdit({ id: cell.id, value: '99' });
-  await assert.rejects(() => pkg.exportValidatedCopy(), /数式セル/);
+  // The editable value is the formula itself (with leading '=').
+  assert.equal(cell.value, '=SUM(B1:B3)');
+  // Editing the formula rewrites the <f> element.
+  pkg.stageEdit({ id: cell.id, value: '=SUM(C1:C3)' });
+  const result = await pkg.exportValidatedCopy();
+  const reopened = await JSZip.loadAsync(result.bytes, { checkCRC32: true });
+  const sheet = await reopened.file('xl/worksheets/sheet1.xml').async('string');
+  assert.match(sheet, /<c r="A1"[^>]*><f>SUM\(C1:C3\)<\/f><\/c>/);
+  // Editing with a plain value drops the formula and converts to a normal cell.
+  pkg.edits.clear();
+  pkg.stageEdit({ id: cell.id, value: '42' });
+  const result2 = await pkg.exportValidatedCopy();
+  const reopened2 = await JSZip.loadAsync(result2.bytes, { checkCRC32: true });
+  const sheet2 = await reopened2.file('xl/worksheets/sheet1.xml').async('string');
+  assert.ok(/<c r="A1"[^>]*><v>42<\/v><\/c>/.test(sheet2), 'formula not replaced by plain value');
+  assert.ok(!/<f>/.test(sheet2), 'stale <f> should be gone');
 });
 
 module.exports = { makeZip, contentTypes };

@@ -36,7 +36,16 @@
     const input = document.createElement('input');
     input.value = item.value;
     input.disabled = !model.canEdit || item.formula;
-    input.title = item.formula ? '数式セルは閲覧のみです' : 'Enterで変更をステージします';
+    const edited = !item.formula && item.value !== item.text;
+    if (edited) {
+      row.classList.add('edited');
+      input.classList.add('edited-input');
+    }
+    input.title = item.formula
+      ? '数式セルは閲覧のみです'
+      : edited
+        ? `変更前: ${item.text}\n変更後: ${item.value}`
+        : 'Enterで変更をステージします';
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && input.value !== item.value) {
         vscode.postMessage({ type: 'stage-edit', edit: { id: item.id, value: input.value } });
@@ -47,6 +56,7 @@
     });
     row.appendChild(input);
     if (item.formula) row.appendChild(text('span', 'ƒx', 'formula'));
+    else if (edited) row.appendChild(text('span', '編集済み', 'edited-badge'));
     return row;
   }
 
@@ -82,17 +92,25 @@
     row.appendChild(text('span', label, 'row-label'));
     const input = document.createElement('input');
     input.value = para.value;
+    const edited = para.value !== para.text;
+    if (edited) {
+      row.classList.add('edited');
+      input.classList.add('edited-input');
+    }
     input.disabled = !model.canEdit;
-    input.title = 'Enterで変更をステージします';
+    input.title = edited
+      ? `変更前: ${para.text}\n変更後: ${para.value}`
+      : 'Enterで変更をステージします';
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && input.value !== para.value) {
         vscode.postMessage({ type: 'stage-edit', edit: { id: para.id, value: input.value } });
       }
     });
     input.addEventListener('change', () => {
-      if (input.value !== para.value) vscode.postMessage({ type: 'stage-edit', edit: { id: para.id, value: input.value } });
+      if (input.value !== para.text) vscode.postMessage({ type: 'stage-edit', edit: { id: para.id, value: input.value } });
     });
     row.appendChild(input);
+    if (edited) row.appendChild(text('span', '編集済み', 'edited-badge'));
     return row;
   }
 
@@ -121,11 +139,46 @@
     }
   }
 
+  function editShape(shape) {
+    const card = document.createElement('div');
+    card.className = 'edit-row shape-row';
+    const textInput = document.createElement('input');
+    textInput.value = shape.value;
+    textInput.disabled = !model.canEdit;
+    textInput.placeholder = '図形テキスト';
+    textInput.title = '図形のテキスト';
+    textInput.addEventListener('change', () => {
+      if (textInput.value !== shape.text) vscode.postMessage({ type: 'stage-edit', edit: { id: `${shape.id}:text`, value: textInput.value } });
+    });
+    card.appendChild(textInput);
+    const fill = document.createElement('input');
+    fill.type = 'color';
+    fill.value = shape.fillValue || '#ffffff';
+    fill.disabled = !model.canEdit;
+    fill.title = `塗りつぶし色 (元: ${shape.fillColor || 'なし'})`;
+    fill.addEventListener('change', () => vscode.postMessage({ type: 'stage-edit', edit: { id: `${shape.id}:fill`, value: fill.value } }));
+    card.appendChild(fill);
+    const line = document.createElement('input');
+    line.type = 'color';
+    line.value = shape.lineValue || '#000000';
+    line.disabled = !model.canEdit;
+    line.title = `枠線色 (元: ${shape.lineColor || 'なし'})`;
+    line.addEventListener('change', () => vscode.postMessage({ type: 'stage-edit', edit: { id: `${shape.id}:line`, value: line.value } }));
+    card.appendChild(line);
+    const del = document.createElement('button');
+    del.textContent = '削除';
+    del.disabled = !model.canEdit;
+    del.title = 'この図形を削除';
+    del.addEventListener('click', () => vscode.postMessage({ type: 'stage-edit', edit: { id: `${shape.id}:delete`, value: '' } }));
+    card.appendChild(del);
+    return card;
+  }
+
   function renderPptx() {
     tabs.hidden = true;
     preview.innerHTML = '';
     outline.innerHTML = '';
-    const intro = text('p', '軽量構造ビューです。座標・テーマ・マスター・画像は変更せず、既存 a:t テキストだけを編集します。上段がスライド内テキストの視覚的プレビュー、下段が編集フィールドです。', 'muted');
+    const intro = text('p', '本格的な図形編集ビューです。各図形のテキスト・塗りつぶし色・枠線色を直接編集でき、図形ごと削除も可能です。テーマ・マスター・アニメーション・画像は変更せず、編集した図形の内部マークアップのみ書き換えます。上段がスライド内テキストの視覚的プレビュー、下段が図形ごとの編集フィールドです。', 'muted');
     preview.appendChild(intro);
     const deck = document.createElement('div');
     deck.className = 'slides';
@@ -135,7 +188,7 @@
       const head = document.createElement('div');
       head.className = 'slide-head';
       head.appendChild(text('strong', `Slide ${slide.number}`));
-      head.appendChild(text('span', `画像 ${slide.imageCount}`, 'muted'));
+      head.appendChild(text('span', `画像 ${slide.imageCount} · 図形 ${slide.shapes.length}`, 'muted'));
       card.appendChild(head);
       const previewBox = document.createElement('div');
       previewBox.className = 'slide-preview';
@@ -143,13 +196,14 @@
       slide.items.forEach((item) => {
         const line = document.createElement('p');
         line.className = 'slide-line';
-        line.textContent = item.value || ' ';
+        line.textContent = item.value || ' ';
         previewBox.appendChild(line);
       });
       card.appendChild(previewBox);
       const list = document.createElement('div');
       list.className = 'edit-list';
-      slide.items.forEach((item, i) => list.appendChild(editRow(item, `${i + 1}`)));
+      if (!slide.shapes.length) list.appendChild(text('p', '（図形なし）', 'muted'));
+      slide.shapes.forEach((shape, i) => list.appendChild(editShape(shape, i)));
       card.appendChild(list);
       deck.appendChild(card);
     });
@@ -200,24 +254,24 @@
           const item = map.get(`${letters}${row}`);
           const td = document.createElement('td');
           if (item) {
-            if (item.formula) {
-              const input = document.createElement('input');
-              input.value = item.value;
-              input.disabled = true;
-              input.readOnly = true;
-              input.className = 'formula-cell';
-              input.title = item.formulaText ? `数式 (閲覧のみ): =${item.formulaText}` : '数式セルは閲覧のみです';
-              td.appendChild(input);
-              td.appendChild(text('span', 'ƒx', 'formula'));
-            } else {
-              const input = document.createElement('input');
-              input.value = item.value;
-              input.disabled = !model.canEdit;
-              input.addEventListener('change', () => {
-                if (input.value !== item.value) vscode.postMessage({ type: 'stage-edit', edit: { id: item.id, value: input.value } });
-              });
-              td.appendChild(input);
+            const input = document.createElement('input');
+            input.value = item.value;
+            const edited = !item.formula && item.value !== item.text;
+            if (edited) {
+              input.classList.add('edited-input');
             }
+            input.disabled = !model.canEdit;
+            input.title = item.formula
+              ? `数式セル（編集可）: ${item.formulaText ? '=' + item.formulaText : ''}`
+              : edited
+                ? `変更前: ${item.text}\n変更後: ${item.value}`
+                : 'Enterで変更をステージします';
+            input.addEventListener('change', () => {
+              if (input.value !== item.value) vscode.postMessage({ type: 'stage-edit', edit: { id: item.id, value: input.value } });
+            });
+            td.appendChild(input);
+            if (item.formula) td.appendChild(text('span', 'ƒx', 'formula'));
+            else if (edited) td.appendChild(text('span', '編集済み', 'edited-badge'));
           }
           tr.appendChild(td);
         }

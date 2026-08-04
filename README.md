@@ -11,8 +11,8 @@ VS Office is designed for quick reviews and small corrections in `.docx`, `.pptx
 ## Why VS Office?
 
 - **Stay in your editor:** inspect supported Office files directly in Visual Studio Code.
-- **Make focused corrections:** edit existing Word text runs, PowerPoint text runs, and non-formula Excel cells.
-- **Preserve unrelated content:** do not regenerate themes, styles, images, slide masters, formulas, embedded files, or other untouched OOXML parts.
+- **Make focused corrections:** edit existing Word text runs, PowerPoint text runs, and Excel cells — including formulas.
+- **Preserve unrelated content:** do not regenerate themes, styles, images, slide masters, embedded files, or other untouched OOXML parts.
 - **Validate every save:** recheck ZIP CRC values and compare untouched parts with SHA-256 hashes before accepting the result.
 - **Recover when needed:** create a backup before overwriting by default, and support both standard Save and Save As.
 
@@ -20,9 +20,9 @@ VS Office is designed for quick reviews and small corrections in `.docx`, `.pptx
 
 | Format | Preview | Focused editing |
 | --- | --- | --- |
-| DOCX | Page preview powered by `docx-preview`, plus an editable text outline | Existing `w:t` text runs |
-| PPTX | Lightweight structural view of slide order, text, and image counts | Existing `a:t` text runs |
-| XLSX | Spreadsheet grid of up to 200 rows by 50 columns | Non-formula cells; shared-string cells are converted individually to `inlineStr` |
+| DOCX | Page preview powered by `docx-preview`, plus an editable paragraph outline | Existing `w:t` text runs, re-fanned across runs to preserve bold/italic formatting |
+| PPTX | Visual preview of each slide's text plus a per-shape editing card | Per-shape text, solid-fill colour, line colour, and shape deletion — themes, masters, animations, and images are left untouched |
+| XLSX | Spreadsheet grid of up to 200 rows by 50 columns | Any cell, including formulas (edited as `=...` and rewritten into `<f>`) |
 
 ## Save protection
 
@@ -34,7 +34,7 @@ VS Office uses a conservative save pipeline:
 4. Create a recoverable copy in `.vs-office-backups` when backups are enabled.
 5. Replace the original atomically only after validation succeeds.
 
-Digitally signed and encrypted packages open in read-only mode. Formula cells are also read-only.
+Digitally signed and encrypted packages open in read-only mode.
 
 ## Getting started
 

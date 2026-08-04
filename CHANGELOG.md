@@ -1,5 +1,20 @@
 # Change Log
 
+## 0.5.0
+
+- PPTX: 本格的な図形編集を追加。各図形（p:sp）のテキスト・塗りつぶし色（solidFill/srgbClr）・枠線色を直接編集し、図形ごと削除も可能に。テーマ・マスター・アニメーション・画像は変更せず、編集した図形の内部マークアップのみ書き換えます。
+- PPTX: 編集 id 体系を拡張（`pptx:<slide>:<shape>:(text|fill|line|delete)`）。色編集は `#RRGGBB` 形式で検証、不正な値はステージ時に拒否。
+- PPTX: webview の図形を編集カード（テキスト入力＋2 色ピッカー＋削除ボタン）として表示。
+- テストを 27 件から 33 件に拡充（pptx-shape.test.js を新規追加: モデル抽出・テキスト再配分・色書き換え・削除・色検証）。
+
+## 0.4.0
+
+- XLSX: 数式セルを編集可能に。数式は `=...` として編集し、`<f>` 要素へ書き戻します（計算値はアプリ側で再計算）。数式を `=` なしの値に変更すると通常セルへ変換します。
+- 編集差分の可視化: 編集済みのセル・段落に緑の枠と「編集済み」バッジ、変更前後のテキストをツールチップで表示。
+- 敵対的レビューに対応: `escapeXml` が XML 1.0 禁止の制御文字を除去、編集 id のフォーマット検証、orphan edit（実在しない id）の保存時拒否、リレーションシップの `..` トラバーサル防御。
+- テストを 19 件から 24 件に拡充（adversarial.test.js を新規追加）。
+- 保守的保存パイプライン（未編集パーツの SHA-256 一致＋ZIP CRC 検証）を維持。
+
 ## 0.3.0
 
 - DOCX: 段落単位の安全編集を追加。段落内の複数 run へ文字数比率で自動配分し、太字・斜体などの書式（w:rPr）を保持したままテキストだけを置換します。
@@ -11,22 +26,4 @@
 
 ## 0.2.2
 
-- Add a new product hero image for GitHub and the Visual Studio Marketplace.
-- Rewrite the product introduction around focused editing, format support, and save protection.
-- Add a dark Marketplace gallery banner that matches the product artwork.
-
-## 0.2.1
-
-- Publish the Marketplace and GitHub introduction in English.
-
-## 0.2.0
-
-- Add lightweight DOCX page preview and conservative text editing.
-- Add PPTX slide structure preview and conservative text editing.
-- Add XLSX grid preview and non-formula cell editing.
-- Support standard `Ctrl+S`, Save As, undo, redo and VS Code dirty state.
-- Validate ZIP CRC and untouched OOXML part hashes before saving.
-- Save through a validated temporary file and atomic replacement.
-- Detect external file changes and block unsafe overwrites.
-- Add optional automatic backups and a transparent Marketplace icon.
-- Standardize the product name and public identifiers as VS Office.
+- 初回リリース。DOCX/PPTX/XLSX の OOXML 構造保全テキスト編集、保守的保存（SHA-256/CRC32 検証）、上書き前バックアップ・別名保存・undo/redo を提供。
