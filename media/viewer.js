@@ -24,9 +24,13 @@
   }
 
   function showToast(message, error = false) {
-    toast.textContent = message;
-    toast.className = error ? 'show error' : 'show';
-    setTimeout(() => { toast.className = ''; }, 5000);
+    const stack = document.getElementById('toasts') || toast.parentElement;
+    const el = document.createElement('div');
+    el.className = error ? 'toast-item error' : 'toast-item';
+    el.textContent = message;
+    stack.appendChild(el);
+    setTimeout(() => { el.classList.add('hide'); }, 5000);
+    setTimeout(() => { el.remove(); }, 5500);
   }
 
   function editRow(item, label) {
@@ -69,9 +73,12 @@
     discardButton.disabled = !model.editCount;
     notice.innerHTML = '';
     const message = model.canEdit
-      ? 'Ctrl+Sで元ファイルへ保存できます。一時ファイルを検証してから原子的に置換し、未編集パートのSHA-256一致とZIP CRCを確認します。'
+      ? 'Ctrl+Sで元ファイルへ保存できます。一時ファイルを検証してから原子的に置換し、未編集パーツのSHA-256一致とZIP CRCを確認します。'
       : model.editBlockReason;
     notice.appendChild(text('div', message, model.canEdit ? 'notice safe' : 'notice warning'));
+    // Tabs are shown for DOCX (preview/edit) and PPTX (preview/edit). XLSX edits
+    // inline, so its single grid view needs no tab switch.
+    tabs.hidden = model.kind === 'xlsx';
   }
 
   function renderDocx() {
@@ -175,10 +182,9 @@
   }
 
   function renderPptx() {
-    tabs.hidden = true;
     preview.innerHTML = '';
     outline.innerHTML = '';
-    const intro = text('p', '本格的な図形編集ビューです。各図形のテキスト・塗りつぶし色・枠線色を直接編集でき、図形ごと削除も可能です。テーマ・マスター・アニメーション・画像は変更せず、編集した図形の内部マークアップのみ書き換えます。上段がスライド内テキストの視覚的プレビュー、下段が図形ごとの編集フィールドです。', 'muted');
+    const intro = text('p', '本格的な図形編集ビューです。各図形のテキスト・塗りつぶし色・枠線色を直接編集でき、図形ごと削除も可能です。テーマ・マスター・アニメーション・画像は変更せず、編集した図形の内部マークアップのみ書き換えます。「プレビュー」タブがスライド内テキストの視覚的プレビュー、「安全編集」タブが図形ごとの編集フィールドです。', 'muted');
     preview.appendChild(intro);
     const deck = document.createElement('div');
     deck.className = 'slides';
@@ -200,14 +206,21 @@
         previewBox.appendChild(line);
       });
       card.appendChild(previewBox);
+      deck.appendChild(card);
+    });
+    preview.appendChild(deck);
+
+    const editIntro = text('p', '図形ごとの編集フィールド。テキスト・塗りつぶし色・枠線色を直接編集し、図形ごと削除も可能です。', 'muted');
+    outline.appendChild(editIntro);
+    model.slides.forEach((slide, si) => {
+      const secHead = text('h3', `Slide ${slide.number}`, 'slide-edit-head');
+      outline.appendChild(secHead);
       const list = document.createElement('div');
       list.className = 'edit-list';
       if (!slide.shapes.length) list.appendChild(text('p', '（図形なし）', 'muted'));
       slide.shapes.forEach((shape, i) => list.appendChild(editShape(shape, i)));
-      card.appendChild(list);
-      deck.appendChild(card);
+      outline.appendChild(list);
     });
-    preview.appendChild(deck);
   }
 
   function colNumber(ref) {
@@ -218,7 +231,6 @@
   }
 
   function renderXlsx() {
-    tabs.hidden = true;
     preview.innerHTML = '';
     outline.innerHTML = '';
     const switcher = document.createElement('div');

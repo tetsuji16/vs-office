@@ -239,7 +239,7 @@ class VsOfficeProvider {
   </header>
   <div id="notice"></div>
   <nav id="tabs" hidden>
-    <button data-tab="preview" class="active">レイアウト表示</button>
+    <button data-tab="preview" class="active">プレビュー</button>
     <button data-tab="outline">安全編集</button>
   </nav>
   <main>
@@ -247,6 +247,7 @@ class VsOfficeProvider {
     <section id="outline" class="tab-panel" hidden></section>
   </main>
   <div id="toast" role="status" aria-live="polite"></div>
+  <div id="toasts" role="status" aria-live="polite"></div>
   <script nonce="${token}" src="${jszipUri}"></script>
   <script nonce="${token}" src="${docxPreviewUri}"></script>
   <script nonce="${token}" src="${scriptUri}"></script>

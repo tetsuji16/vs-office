@@ -146,10 +146,12 @@ test('XLSX numeric edit keeps a shared-string neighbour untouched', async () => 
   const result = await pkg.exportValidatedCopy();
   const reopened = await JSZip.loadAsync(result.bytes, { checkCRC32: true });
   const shared = await reopened.file('xl/sharedStrings.xml').async('string');
-  // The untouched shared string must remain; only the edited cell becomes inlineStr.
+  // Both the untouched and edited strings must remain in the shared table.
   assert.ok(shared.includes('SharedA'), 'untouched shared string was dropped');
+  assert.ok(shared.includes('SharedB'), 'other shared string was dropped');
+  assert.ok(shared.includes('LocalB'), 'edited value added to shared table');
   const sheet = await reopened.file('xl/worksheets/sheet1.xml').async('string');
-  assert.ok(/B1[^>]*t="inlineStr"/.test(sheet), 'edited cell not converted to inlineStr');
+  assert.ok(/B1[^>]*t="s"/.test(sheet), 'edited cell keeps the shared-string type');
 });
 
 test('XLSX formula cells expose the formula text and accept edits', async () => {

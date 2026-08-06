@@ -15,12 +15,13 @@ const SHELL = `<!doctype html><html><head></head><body>
     </div>
   </header>
   <div id="notice"></div>
-  <nav id="tabs"><button data-tab="preview" class="active">レイアウト表示</button><button data-tab="outline">安全編集</button></nav>
+  <nav id="tabs"><button data-tab="preview" class="active">プレビュー</button><button data-tab="outline">安全編集</button></nav>
   <main>
     <section id="preview" class="tab-panel"></section>
     <section id="outline" class="tab-panel" hidden></section>
   </main>
   <div id="toast" role="status"></div>
+  <div id="toasts" role="status"></div>
 </body></html>`;
 
 function setupViewer(model) {

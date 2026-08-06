@@ -65,8 +65,10 @@ test('XLSX converts a shared-string cell locally and refuses formula changes', a
   const result = await pkg.exportValidatedCopy();
   const reopened = await JSZip.loadAsync(result.bytes, { checkCRC32: true });
   const sheet = await reopened.file('xl/worksheets/sheet1.xml').async('string');
-  assert.match(sheet, /<c r="A1" s="2" t="inlineStr"><is><t>Local<\/t><\/is><\/c>/);
-  assert.equal(await reopened.file('xl/sharedStrings.xml').async('string'), '<sst><si><t>Shared</t></si></sst>');
+  assert.match(sheet, /<c r="A1" s="2" t="s"><v>\d+<\/v><\/c>/);
+  const sst = await reopened.file('xl/sharedStrings.xml').async('string');
+  assert.ok(sst.includes('<t>Local</t>'), 'shared string table gains the edited value');
+  assert.ok(sst.includes('<t>Shared</t>'), 'original shared value retained');
 
   const pkg2 = await OfficePackage.open('sample.xlsx', original);
   const model2 = await pkg2.createViewModel();

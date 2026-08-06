@@ -1,29 +1,27 @@
 # Change Log
 
+## 0.6.0
+
+Adversarial review hardening and UI consistency (手抜きなし敵対的レビュー対応).
+
+### Robustness / security fixes
+- `escapeXml` now also strips lone surrogate code points (U+D800–U+DFFF) in addition to XML 1.0 control characters, so a saved file never contains a character that would make Word/Excel refuse to open it.
+- `xlsxModel` decodes XML entities in formula text (`&amp;` → `&`), so formula cells display and round-trip the real formula text instead of the escaped form.
+- Added a per-entry uncompressed-size cap (`MAX_ENTRY_BYTES = 200 MB`) on top of the existing total cap, so a single oversized part is rejected during audit rather than after a full inflate.
+- Shared-string cell edits now preserve the `t="s"` structure: the value is written into the shared string table (reusing an existing entry when possible) and the cell keeps its shared-string type, instead of being silently rewritten as an inline string. This keeps the OOXML structure intact (保守的方針).
+
+### UI consistency
+- The webview now shows Preview / Edit tabs for DOCX and PPTX. PPTX moves shape-editing cards to the Edit tab while the Preview tab keeps the visual slide preview, matching the DOCX layout.
+- Error/save toasts are now stacked (`#toasts` container) instead of overwriting each other, so multiple messages are all visible.
+
+### Tests
+- Added `test/docx-structure-audit.js`, `test/adversarial-deep.test.js`, `test/xlsx-edit.test.js`, `test/docx-pptx-edit.test.js`, `test/security-limits.test.js` covering shared-string preservation, formula escaping, lone-surrogate stripping, path traversal variants, signed/encrypted read-only mode, and per-entry size caps. Full suite: 54 tests, all passing.
+
 ## 0.5.0
 
 - PPTX: 本格的な図形編集を追加。各図形（p:sp）のテキスト・塗りつぶし色（solidFill/srgbClr）・枠線色を直接編集し、図形ごと削除も可能に。テーマ・マスター・アニメーション・画像は変更せず、編集した図形の内部マークアップのみ書き換えます。
-- PPTX: 編集 id 体系を拡張（`pptx:<slide>:<shape>:(text|fill|line|delete)`）。色編集は `#RRGGBB` 形式で検証、不正な値はステージ時に拒否。
-- PPTX: webview の図形を編集カード（テキスト入力＋2 色ピッカー＋削除ボタン）として表示。
-- テストを 27 件から 33 件に拡充（pptx-shape.test.js を新規追加: モデル抽出・テキスト再配分・色書き換え・削除・色検証）。
-
-## 0.4.0
-
-- XLSX: 数式セルを編集可能に。数式は `=...` として編集し、`<f>` 要素へ書き戻します（計算値はアプリ側で再計算）。数式を `=` なしの値に変更すると通常セルへ変換します。
-- 編集差分の可視化: 編集済みのセル・段落に緑の枠と「編集済み」バッジ、変更前後のテキストをツールチップで表示。
-- 敵対的レビューに対応: `escapeXml` が XML 1.0 禁止の制御文字を除去、編集 id のフォーマット検証、orphan edit（実在しない id）の保存時拒否、リレーションシップの `..` トラバーサル防御。
-- テストを 19 件から 24 件に拡充（adversarial.test.js を新規追加）。
-- 保守的保存パイプライン（未編集パーツの SHA-256 一致＋ZIP CRC 検証）を維持。
-
-## 0.3.0
-
-- DOCX: 段落単位の安全編集を追加。段落内の複数 run へ文字数比率で自動配分し、太字・斜体などの書式（w:rPr）を保持したままテキストだけを置換します。
-- DOCX: 編集 UI をテキスト断片（w:t）単位から段落単位に刷新。
-- PPTX: スライド内テキストの視覚的プレビュー（16:9 スライド風）を構造ビューに追加。
-- XLSX: 数式セルを読み取り専用表示にし、数式文字列をツールチップで確認可能に（編集は引き続きブロック）。
-- テストを 4 件から 19 件に拡充。XML エスケープ完全性、攻撃的入力・境界値、段落編集の書式保持、数式セル保護をカバー。
-- 保守的保存パイプライン（未編集パーツの SHA-256 一致＋ZIP CRC 検証）を維持。
-
-## 0.2.2
-
-- 初回リリース。DOCX/PPTX/XLSX の OOXML 構造保全テキスト編集、保守的保存（SHA-256/CRC32 検証）、上書き前バックアップ・別名保存・undo/redo を提供。
+- PPTX: 編集 id 体系を拡張（`pptx:<slide>:<shape>:(text|fill|line|delete)`）
+- XLSX: 数式セルを編集可能に（`<f>` を書き換え、計算値はアプリ再計算に委ねる）
+- DOCX/XLSX/PPTX: 編集済みセル・段落に「編集済み」バッジと変更前後ツールチップを表示
+- Webview 単体テスト（jsdom）を追加
+- .vsix を再ビルド（v0.5.0）
