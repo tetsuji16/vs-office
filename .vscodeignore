@@ -2,6 +2,7 @@
 .gitignore
 .vscode/**
 test/**
+samples/**
 *.vsix
 assets/*-chroma.png
 node_modules/@types/**

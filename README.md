@@ -66,3 +66,16 @@ Open this folder in Visual Studio Code and press `F5` to start an Extension Deve
 - [JSZip](https://github.com/Stuk/jszip) (MIT / GPLv3) reads and writes OOXML ZIP containers and validates CRC values.
 
 [SheetJS Community Edition](https://git.sheetjs.com/sheetjs/sheetjs) was evaluated for XLSX support. It is not used for saving because regenerating an entire workbook can discard unknown features or layout information. PPTXjs-based renderers were also evaluated, but the current PPTX implementation intentionally uses a structural view because those projects could not provide the required fidelity guarantees.
+
+## Verifying the webview render
+
+`samples/` contains minimal valid DOCX/PPTX/XLSX fixtures plus a headless Chromium renderer used to confirm the webview (preview + edit tabs) draws correctly without a VS Code host:
+
+```powershell
+npm install --no-save playwright
+npx playwright install --with-deps chromium
+node samples/make-samples.js      # regenerate sample.docx / sample.pptx / sample.xlsx
+node samples/render-webview.js    # capture render-*.png for each format
+```
+
+The renderer loads `media/viewer.js`, `media/viewer.css`, `jszip`, and `docx-preview` directly and posts a model to the same message path the extension uses, so it exercises the real UI code path. (The `samples/` folder is excluded from the published `.vsix`.)
