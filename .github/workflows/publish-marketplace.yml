@@ -1,32 +1,40 @@
-name: Publish VS Code Marketplace
+name: Publish to VS Code Marketplace
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: marketplace-publish
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: marketplace
     steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Verify and publish
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - id: version
+        shell: bash
+        run: |
+          current="$(node -p "require('./package.json').version")"
+          previous="$(git show HEAD^:package.json 2>/dev/null | node -e "let source=''; process.stdin.on('data', chunk => source += chunk).on('end', () => console.log(JSON.parse(source).version))" || true)"
+          echo "current=${current}" >> "$GITHUB_OUTPUT"
+          echo "publish=$([[ "${current}" != "${previous}" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Publish version ${{ steps.version.outputs.current }}
+        if: steps.version.outputs.publish == 'true'
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx @vscode/vsce publish --pat "$VSCE_PAT"
+        run: npx vsce publish --no-dependencies --pat "$VSCE_PAT"
