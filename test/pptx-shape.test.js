@@ -91,6 +91,28 @@ test('pptx shape delete removes the sp element', async () => {
   assert.ok(!xml.includes('Drop'), 'deleted shape still present');
 });
 
+test('pptx applies a batch of shape edits against their original ordinals', async () => {
+  const slide = `<p:sld xmlns:p="p" xmlns:a="a"><p:sp><p:nvSpPr/><p:spPr/><p:txBody><a:p><a:r><a:t>First</a:t></a:r></a:p></p:txBody></p:sp><p:sp><p:nvSpPr/><p:spPr/><p:txBody><a:p><a:r><a:t>Second</a:t></a:r></a:p></p:txBody></p:sp><p:sp><p:nvSpPr/><p:spPr/><p:txBody><a:p><a:r><a:t>Third</a:t></a:r></a:p></p:txBody></p:sp></p:sld>`;
+  const original = await makeZip({
+    '[Content_Types].xml': contentTypes,
+    'ppt/presentation.xml': '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>',
+    'ppt/_rels/presentation.xml.rels': '<Relationships><Relationship Id="rId1" Target="slides/slide1.xml" Type="t"/></Relationships>',
+    'ppt/slides/slide1.xml': slide,
+  });
+  const pkg = await OfficePackage.open('batch.pptx', original);
+  const model = await pkg.createViewModel();
+  pkg.stageEdit({ id: `${model.slides[0].shapes[0].id}:delete`, value: '' });
+  pkg.stageEdit({ id: `${model.slides[0].shapes[1].id}:delete`, value: '' });
+  pkg.stageEdit({ id: `${model.slides[0].shapes[2].id}:fill`, value: '#123456' });
+
+  const result = await pkg.exportValidatedCopy();
+  const reopened = await JSZip.loadAsync(result.bytes, { checkCRC32: true });
+  const xml = await reopened.file('ppt/slides/slide1.xml').async('string');
+  assert.ok(!xml.includes('First') && !xml.includes('Second'), 'both selected shapes must be removed');
+  assert.ok(xml.includes('Third'), 'an unselected later shape must remain');
+  assert.match(xml, /<a:srgbClr val="123456"/);
+});
+
 test('invalid colour value is rejected at save time', async () => {
   const slide = `<p:sld xmlns:p="p" xmlns:a="a"><p:sp><p:nvSpPr/><p:spPr/><p:txBody><a:p><a:r><a:t>X</a:t></a:r></a:p></p:txBody></p:sp></p:sld>`;
   const original = await makeZip({
