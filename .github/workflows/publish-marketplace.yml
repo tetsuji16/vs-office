@@ -37,4 +37,4 @@ jobs:
         if: steps.version.outputs.publish == 'true'
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx vsce publish --no-dependencies --pat "$VSCE_PAT"
+        run: npx vsce publish --skip-duplicate --pat "$VSCE_PAT"

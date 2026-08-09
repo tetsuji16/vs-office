@@ -1,8 +1,11 @@
 .git/**
 .gitignore
+.github/**
 .vscode/**
 test/**
 samples/**
 *.vsix
 assets/*-chroma.png
 node_modules/@types/**
+node_modules/playwright/**
+node_modules/playwright-core/**

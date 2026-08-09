@@ -113,6 +113,49 @@ test('pptx applies a batch of shape edits against their original ordinals', asyn
   assert.match(xml, /<a:srgbClr val="123456"/);
 });
 
+test('pptx applies text-node edits before a shape deletion shifts their ordinals', async () => {
+  const slide = `<p:sld xmlns:p="p" xmlns:a="a"><p:sp><p:nvSpPr/><p:spPr/><p:txBody><a:p><a:r><a:t>Delete</a:t></a:r></a:p></p:txBody></p:sp><p:sp><p:nvSpPr/><p:spPr/><p:txBody><a:p><a:r><a:t>Edit me</a:t></a:r></a:p></p:txBody></p:sp></p:sld>`;
+  const original = await makeZip({
+    '[Content_Types].xml': contentTypes,
+    'ppt/presentation.xml': '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>',
+    'ppt/_rels/presentation.xml.rels': '<Relationships><Relationship Id="rId1" Target="slides/slide1.xml" Type="t"/></Relationships>',
+    'ppt/slides/slide1.xml': slide,
+  });
+  const pkg = await OfficePackage.open('mixed.pptx', original);
+  const model = await pkg.createViewModel();
+  pkg.stageEdit({ id: `${model.slides[0].shapes[0].id}:delete`, value: '' });
+  pkg.stageEdit({ id: model.slides[0].items[1].id, value: 'Edited' });
+
+  const result = await pkg.exportValidatedCopy();
+  const reopened = await JSZip.loadAsync(result.bytes, { checkCRC32: true });
+  const xml = await reopened.file('ppt/slides/slide1.xml').async('string');
+  assert.ok(!xml.includes('Delete'));
+  assert.ok(xml.includes('<a:t>Edited</a:t>'));
+});
+
+test('pptx keeps fill and line colours inside shape properties and independent', async () => {
+  const slide = `<p:sld xmlns:p="p" xmlns:a="a"><p:sp><p:nvSpPr/><p:spPr><a:prstGeom prst="rect"/><a:ln><a:solidFill><a:srgbClr val="ABCDEF"/></a:solidFill></a:ln></p:spPr><p:txBody><a:p><a:r><a:t>X</a:t></a:r></a:p></p:txBody></p:sp><p:sp><p:nvSpPr/><p:spPr/><p:txBody><a:p><a:r><a:t>Y</a:t></a:r></a:p></p:txBody></p:sp></p:sld>`;
+  const original = await makeZip({
+    '[Content_Types].xml': contentTypes,
+    'ppt/presentation.xml': '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>',
+    'ppt/_rels/presentation.xml.rels': '<Relationships><Relationship Id="rId1" Target="slides/slide1.xml" Type="t"/></Relationships>',
+    'ppt/slides/slide1.xml': slide,
+  });
+  const pkg = await OfficePackage.open('colours.pptx', original);
+  const model = await pkg.createViewModel();
+  assert.equal(model.slides[0].shapes[0].fillColor, '', 'line colour must not be reported as shape fill');
+  assert.equal(model.slides[0].shapes[0].lineColor, 'abcdef');
+  pkg.stageEdit({ id: `${model.slides[0].shapes[0].id}:fill`, value: '#112233' });
+  pkg.stageEdit({ id: `${model.slides[0].shapes[1].id}:line`, value: '#445566' });
+
+  const result = await pkg.exportValidatedCopy();
+  const reopened = await JSZip.loadAsync(result.bytes, { checkCRC32: true });
+  const xml = await reopened.file('ppt/slides/slide1.xml').async('string');
+  assert.match(xml, /<p:spPr><a:prstGeom prst="rect"\/><a:solidFill><a:srgbClr val="112233"\/><\/a:solidFill><a:ln><a:solidFill><a:srgbClr val="ABCDEF"/);
+  assert.match(xml, /<p:spPr><a:ln><a:solidFill><a:srgbClr val="445566"\/><\/a:solidFill><\/a:ln><\/p:spPr>/);
+  assert.doesNotMatch(xml, /<p:spPr\/><a:(?:solidFill|ln)>/);
+});
+
 test('invalid colour value is rejected at save time', async () => {
   const slide = `<p:sld xmlns:p="p" xmlns:a="a"><p:sp><p:nvSpPr/><p:spPr/><p:txBody><a:p><a:r><a:t>X</a:t></a:r></a:p></p:txBody></p:sp></p:sld>`;
   const original = await makeZip({
