@@ -2,10 +2,13 @@
 .gitignore
 .github/**
 .vscode/**
+.tmp/**
 test/**
 samples/**
 *.vsix
 assets/*-chroma.png
-node_modules/@types/**
-node_modules/playwright/**
-node_modules/playwright-core/**
+node_modules/**
+extension.js
+src/**
+esbuild.js
+package-lock.json

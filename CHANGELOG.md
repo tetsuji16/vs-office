@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.6.3
+
+- 拡張ホスト側のコードを esbuild で単一ファイルにバンドルし、VSIX から開発用ソースと `node_modules` を除外。
+- Webview が必要とするブラウザ用ライブラリと第三者ライセンスだけを公開物へ収録。
+- Marketplace 公開ワークフローを Node.js 24 および Node 24 対応版の公式Actionsへ更新。
+
 ## 0.6.2
 
 - XLSX の名前空間接頭辞付き要素（`x:sheet`、`x:c`、`x:f` など）を読み書きできるように改善。

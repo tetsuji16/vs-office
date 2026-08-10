@@ -54,8 +54,6 @@ class VsOfficeProvider {
       enableScripts: true,
       localResourceRoots: [
         vscode.Uri.joinPath(this.context.extensionUri, 'media'),
-        vscode.Uri.joinPath(this.context.extensionUri, 'node_modules', 'docx-preview', 'dist'),
-        vscode.Uri.joinPath(this.context.extensionUri, 'node_modules', 'jszip', 'dist'),
       ],
     };
 
@@ -63,16 +61,14 @@ class VsOfficeProvider {
     const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'viewer.css'));
     const docxPreviewUri = webview.asWebviewUri(vscode.Uri.joinPath(
       this.context.extensionUri,
-      'node_modules',
-      'docx-preview',
-      'dist',
+      'media',
+      'vendor',
       'docx-preview.min.js',
     ));
     const jszipUri = webview.asWebviewUri(vscode.Uri.joinPath(
       this.context.extensionUri,
-      'node_modules',
-      'jszip',
-      'dist',
+      'media',
+      'vendor',
       'jszip.min.js',
     ));
     const token = nonce();
