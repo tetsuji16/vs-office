@@ -325,6 +325,41 @@ function relationshipMap(xml, basePart) {
   return result;
 }
 
+function appendSharedStringEntries(xml, values) {
+  if (!values.length) return xml;
+  const rootMatch = /<((?:[A-Za-z_][\w.-]*:)?sst)\b([^>]*)>/.exec(xml);
+  if (!rootMatch) throw new OfficePackageError('共有文字列テーブルの形式が不正です。');
+
+  const rootTag = rootMatch[1];
+  const prefix = rootTag.includes(':') ? `${rootTag.split(':')[0]}:` : '';
+  const selfClosing = /\/\s*>$/.test(rootMatch[0]);
+  let rootAttrs = rootMatch[2].replace(/\/\s*$/, '');
+  const existingEntries = Array.from(xml.matchAll(/<(?:[A-Za-z_][\w.-]*:)?si\b/g)).length;
+  const uniqueCount = existingEntries + values.length;
+  if (/\buniqueCount\s*=/.test(rootAttrs)) {
+    rootAttrs = rootAttrs.replace(/(\buniqueCount\s*=\s*)(["'])\d+\2/, `$1"${uniqueCount}"`);
+  } else {
+    rootAttrs += ` uniqueCount="${uniqueCount}"`;
+  }
+  const openTag = `<${rootTag}${rootAttrs}>`;
+  const entries = values.map((value) =>
+    `<${prefix}si><${prefix}t${/^\s|\s$/.test(value) ? ' xml:space="preserve"' : ''}>${escapeXml(value)}</${prefix}t></${prefix}si>`,
+  ).join('');
+
+  if (selfClosing) {
+    return xml.replace(rootMatch[0], `${openTag}${entries}</${rootTag}>`);
+  }
+  let updated = xml.replace(rootMatch[0], openTag);
+  const closeTag = `</${rootTag}>`;
+  const closeIndex = updated.lastIndexOf(closeTag);
+  if (closeIndex < 0) throw new OfficePackageError('共有文字列テーブルの終了タグがありません。');
+  // extLst, when present, must remain the final child of the SST root.
+  const extMatch = /<(?:[A-Za-z_][\w.-]*:)?extLst\b/.exec(updated.slice(rootMatch.index, closeIndex));
+  const insertIndex = extMatch ? rootMatch.index + extMatch.index : closeIndex;
+  updated = `${updated.slice(0, insertIndex)}${entries}${updated.slice(insertIndex)}`;
+  return updated;
+}
+
 class OfficePackage {
   constructor(filePath, originalBytes, zip, kind) {
     this.filePath = filePath;
@@ -636,7 +671,14 @@ class OfficePackage {
             } else {
               inner = `<${childPrefix}f>${fText}</${childPrefix}f>`;
             }
-            return `<${cellTag} ${attrs} t="str">${inner}</${cellTag}>`;
+            // Formula result types are meaningful in OOXML. Preserve an
+            // existing non-numeric result type (for example `str` or `b`),
+            // but leave numeric/new formulas untyped so recalculation yields
+            // numeric values instead of forcing them into strings.
+            const resultType = cell.formula && ['b', 'd', 'e', 'str'].includes(cell.type)
+              ? ` t="${cell.type}"`
+              : '';
+            return `<${cellTag} ${attrs}${resultType}>${inner}</${cellTag}>`;
           }
           if (cell.type === 'n' && /^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/.test(value.trim())) {
             return `<${cellTag} ${attrs}><${childPrefix}v>${escapeXml(value.trim())}</${childPrefix}v></${cellTag}>`;
@@ -654,10 +696,11 @@ class OfficePackage {
         if (touched) changed.set(sheet.part, xml);
       }
       if (sharedDirty && this.zip.file('xl/sharedStrings.xml')) {
-        const escaped = sharedStrings.map((s) => `<si><t${/^\s|\s$/.test(s) ? ' xml:space="preserve"' : ''}>${escapeXml(s)}</t></si>`);
-        const count = escaped.length;
-        const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${count}" uniqueCount="${count}">${escaped.join('')}</sst>`;
-        changed.set('xl/sharedStrings.xml', xml);
+        const originalSharedXml = await this.readText('xl/sharedStrings.xml');
+        const appended = sharedStrings.slice(model.sharedStrings.length);
+        if (appended.length) {
+          changed.set('xl/sharedStrings.xml', appendSharedStringEntries(originalSharedXml, appended));
+        }
       }
     }
     return changed;
