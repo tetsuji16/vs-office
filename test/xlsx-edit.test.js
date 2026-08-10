@@ -144,3 +144,41 @@ test('xlsx: reads and edits namespace-prefixed sheets with package-absolute rela
   const outputSheet = await (await JSZip.loadAsync(result.bytes, { checkCRC32: true })).file('xl/worksheets/sheet1.xml').async('string');
   assert.ok(outputSheet.includes('<x:f>B1*3</x:f>'), 'formula edit preserves the source namespace prefix');
 });
+
+test('xlsx: self-closing blank cells do not steal the next populated cell value', async () => {
+  const realWorldSheet = `<?xml version="1.0"?>
+<x:worksheet xmlns:x="x">
+  <x:sheetData>
+    <x:row r="1">
+      <x:c r="A1" t="str"><x:v>Title</x:v></x:c>
+      <x:c r="B1" s="3" />
+      <x:c r="C1" s="3" />
+    </x:row>
+    <x:row r="2">
+      <x:c r="A2" t="str"><x:v>Sales total</x:v></x:c>
+      <x:c r="B2"><x:v>15310</x:v></x:c>
+    </x:row>
+  </x:sheetData>
+</x:worksheet>`;
+  const original = await makeZip({
+    '[Content_Types].xml': contentTypes,
+    'xl/workbook.xml': workbook,
+    'xl/_rels/workbook.xml.rels': rels,
+    'xl/worksheets/sheet1.xml': realWorldSheet,
+  });
+  const pkg = await OfficePackage.open('self-closing.xlsx', original);
+  const model = await pkg.createViewModel();
+  const byRef = Object.fromEntries(model.sheets[0].cells.map((cell) => [cell.ref, cell]));
+
+  assert.equal(byRef.A1.text, 'Title');
+  assert.equal(byRef.B1.text, '');
+  assert.equal(byRef.C1.text, '');
+  assert.equal(byRef.A2.text, 'Sales total');
+  assert.equal(byRef.B2.text, '15310');
+
+  pkg.stageEdit({ id: byRef.B1.id, value: 'new value' });
+  const result = await pkg.exportValidatedCopy();
+  const reopened = await OfficePackage.open('self-closing.xlsx', result.bytes);
+  const edited = (await reopened.createViewModel()).sheets[0].cells.find((cell) => cell.ref === 'B1');
+  assert.equal(edited.text, 'new value', 'a self-closing blank cell can be edited and read back');
+});

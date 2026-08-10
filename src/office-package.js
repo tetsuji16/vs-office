@@ -10,6 +10,16 @@ const MAX_ENTRY_BYTES = 200 * 1024 * 1024;
 const MAX_ENTRIES = 10000;
 const MAX_TEXT_NODES = 50000;
 
+// Match both populated cells (`<c>...</c>`) and styled/blank self-closing cells
+// (`<c .../>`). Treating only the paired form as a cell lets a regex that
+// starts on a self-closing cell consume the body of the next populated cell,
+// shifting every following reference/value pair in real-world workbooks.
+const XLSX_CELL_PATTERN_SOURCE = '<((?:[A-Za-z_][\\w.-]*:)?c)\\b([^>]*?)(?:\\/\\s*>|>([\\s\\S]*?)<\\/\\1>)';
+
+function xlsxCellPattern() {
+  return new RegExp(XLSX_CELL_PATTERN_SOURCE, 'g');
+}
+
 class OfficePackageError extends Error {}
 
 function escapeXml(value) {
@@ -503,10 +513,13 @@ class OfficePackage {
       const xml = await this.readText(part);
       const cells = [];
       let cellOrdinal = 0;
-      for (const cellMatch of xml.matchAll(/<((?:[A-Za-z_][\w.-]*:)?c)\b([^>]*)\br="([A-Z]+[0-9]+)"([^>]*)>([\s\S]*?)<\/\1>/g)) {
-        const attrs = `${cellMatch[2]} ${cellMatch[4]}`;
-        const body = cellMatch[5];
-        const type = /\bt="([^"]+)"/.exec(attrs)?.[1] || 'n';
+      for (const cellMatch of xml.matchAll(xlsxCellPattern())) {
+        const attrsText = cellMatch[2];
+        const cellAttrs = attributes(attrsText);
+        const ref = cellAttrs.r;
+        if (!ref || !/^[A-Za-z]+[0-9]+$/.test(ref)) continue;
+        const body = cellMatch[3] || '';
+        const type = cellAttrs.t || 'n';
         const formula = /<(?:[A-Za-z_][\w.-]*:)?f\b/.test(body);
         const formulaText = decodeXml((/<(?:[A-Za-z_][\w.-]*:)?f\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?f>/.exec(body)?.[1] ?? '').trim());
         const raw = /<(?:[A-Za-z_][\w.-]*:)?v\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?v>/.exec(body)?.[1] ?? '';
@@ -518,7 +531,7 @@ class OfficePackage {
         if (formula && formulaText) value = `=${formulaText}`;
         const id = `xlsx:${sheetIndex}:${cellOrdinal}`;
         value = this.edits.get(id) ?? value;
-        cells.push({ id, part, ordinal: cellOrdinal, ref: cellMatch[3], type, formula, formulaText, value, text: original });
+        cells.push({ id, part, ordinal: cellOrdinal, ref: ref.toUpperCase(), type, formula, formulaText, value, text: original });
         cellOrdinal += 1;
         if (cells.length >= 20000) break;
       }
@@ -597,7 +610,9 @@ class OfficePackage {
         let xml = await this.readText(sheet.part);
         let current = -1;
         let touched = false;
-        xml = xml.replace(/<((?:[A-Za-z_][\w.-]*:)?c)\b([^>]*)\br="([A-Z]+[0-9]+)"([^>]*)>([\s\S]*?)<\/\1>/g, (all, cellTag, left, ref, right, body) => {
+        xml = xml.replace(xlsxCellPattern(), (all, cellTag, attrsText, body = '') => {
+          const ref = attributes(attrsText).r;
+          if (!ref || !/^[A-Za-z]+[0-9]+$/.test(ref)) return all;
           current += 1;
           const id = sheet.cells.find((c) => c.ordinal === current)?.id;
           if (!id || !this.edits.has(id)) return all;
@@ -605,8 +620,9 @@ class OfficePackage {
           touched = true;
           const value = this.edits.get(id);
           const childPrefix = cellTag.includes(':') ? `${cellTag.split(':')[0]}:` : '';
-          const attrs = `${left} r="${ref}"${right}`
+          const attrs = attrsText
             .replace(/\s+t="[^"]*"/g, '')
+            .replace(/\s+t='[^']*'/g, '')
             .trim();
           if (/^=/.test(value.trim())) {
             // User supplied a formula: keep the cell as a formula cell, replace
