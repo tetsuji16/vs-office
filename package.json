@@ -84,6 +84,7 @@
     "vscode:prepublish": "npm run check && npm test && npm run package",
     "build": "node esbuild.js",
     "package": "node esbuild.js --production",
+    "vsce": "npm exec --yes --package=@vscode/vsce@3.9.2 --loglevel=error -- vsce",
     "test": "node --test",
     "check": "node --check extension.js && node --check src/office-package.js && node --check esbuild.js"
   },
@@ -93,8 +94,10 @@
   },
   "devDependencies": {
     "@types/vscode": "^1.90.0",
-    "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.28.2",
-    "jsdom": "^24.0.0"
+    "jsdom": "^29.1.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
   }
 }

@@ -37,4 +37,6 @@ jobs:
         if: steps.version.outputs.publish == 'true'
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx vsce publish --skip-duplicate --pat "$VSCE_PAT"
+        # Keep vsce isolated from the project dependency tree until its
+        # deprecated transitive dependencies are removed upstream.
+        run: npm run vsce -- publish --skip-duplicate --pat "$VSCE_PAT"

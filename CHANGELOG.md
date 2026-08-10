@@ -1,5 +1,10 @@
 # Change Log
 
+## Unreleased
+
+- `jsdom` を非推奨の `whatwg-encoding` に依存しない29系へ更新。
+- `@vscode/vsce` を通常の開発依存から分離し、固定バージョンをMarketplace公開時だけ隔離実行することで、推移的依存関係の非推奨通知を通常のインストールから除去。
+
 ## 0.6.3
 
 - 拡張ホスト側のコードを esbuild で単一ファイルにバンドルし、VSIX から開発用ソースと `node_modules` を除外。
