@@ -281,11 +281,18 @@ function removeNthShape(xml, ordinal) {
 }
 
 function resolveTarget(basePart, target) {
-  // Reject path traversal and absolute targets up front. Relationship targets
-  // must stay inside the package; a "../" or leading "/" would resolve outside
-  // the zip and must never be treated as a readable part.
-  if (target.includes('..') || target.startsWith('/')) return null;
-  return path.posix.normalize(path.posix.join(path.posix.dirname(basePart), target));
+  // OPC permits package-absolute part names such as "/xl/worksheets/sheet1.xml".
+  // Accept those by resolving from the package root, while continuing to reject
+  // traversal (including percent-encoded variants) and Windows-style paths.
+  let decoded;
+  try { decoded = decodeURIComponent(target); } catch { return null; }
+  if (decoded.includes('..') || decoded.includes('\\') || decoded.includes('\0')) return null;
+  const candidate = decoded.startsWith('/')
+    ? decoded.replace(/^\/+/, '')
+    : path.posix.join(path.posix.dirname(basePart), decoded);
+  const normalized = path.posix.normalize(candidate);
+  if (!normalized || normalized === '..' || normalized.startsWith('../') || normalized.startsWith('/')) return null;
+  return normalized;
 }
 
 function attributes(fragment) {
@@ -483,27 +490,27 @@ class OfficePackage {
     let shared = [];
     if (this.zip.file('xl/sharedStrings.xml')) {
       const sharedXml = await this.readText('xl/sharedStrings.xml');
-      shared = Array.from(sharedXml.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g), (m) =>
-        decodeXml(Array.from(m[1].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g), (t) => t[1]).join('')),
+      shared = Array.from(sharedXml.matchAll(/<(?:[A-Za-z_][\w.-]*:)?si\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?si>/g), (m) =>
+        decodeXml(Array.from(m[1].matchAll(/<(?:[A-Za-z_][\w.-]*:)?t\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?t>/g), (t) => t[1]).join('')),
       );
     }
     const sheets = [];
     let sheetIndex = 0;
-    for (const m of workbook.matchAll(/<sheet\b([^>]*)\/?\s*>/g)) {
+    for (const m of workbook.matchAll(/<(?:[A-Za-z_][\w.-]*:)?sheet\b([^>]*)\/?\s*>/g)) {
       const sheetAttrs = attributes(m[1]);
       const part = relMap.get(sheetAttrs['r:id']);
       if (!part || !this.zip.file(part)) continue;
       const xml = await this.readText(part);
       const cells = [];
       let cellOrdinal = 0;
-      for (const cellMatch of xml.matchAll(/<c\b([^>]*)\br="([A-Z]+[0-9]+)"([^>]*)>([\s\S]*?)<\/c>/g)) {
-        const attrs = `${cellMatch[1]} ${cellMatch[3]}`;
-        const body = cellMatch[4];
+      for (const cellMatch of xml.matchAll(/<((?:[A-Za-z_][\w.-]*:)?c)\b([^>]*)\br="([A-Z]+[0-9]+)"([^>]*)>([\s\S]*?)<\/\1>/g)) {
+        const attrs = `${cellMatch[2]} ${cellMatch[4]}`;
+        const body = cellMatch[5];
         const type = /\bt="([^"]+)"/.exec(attrs)?.[1] || 'n';
-        const formula = /<f\b/.test(body);
-        const formulaText = decodeXml((/<f\b[^>]*>([\s\S]*?)<\/f>/.exec(body)?.[1] ?? '').trim());
-        const raw = /<v\b[^>]*>([\s\S]*?)<\/v>/.exec(body)?.[1] ?? '';
-        const inline = Array.from(body.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g), (x) => x[1]).join('');
+        const formula = /<(?:[A-Za-z_][\w.-]*:)?f\b/.test(body);
+        const formulaText = decodeXml((/<(?:[A-Za-z_][\w.-]*:)?f\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?f>/.exec(body)?.[1] ?? '').trim());
+        const raw = /<(?:[A-Za-z_][\w.-]*:)?v\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?v>/.exec(body)?.[1] ?? '';
+        const inline = Array.from(body.matchAll(/<(?:[A-Za-z_][\w.-]*:)?t\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?t>/g), (x) => x[1]).join('');
         const original = type === 's' ? (shared[Number(raw)] ?? '') : type === 'inlineStr' ? decodeXml(inline) : decodeXml(raw);
         // `text` is the original, un-edited cell content (used by the UI to
         // detect edits); `value` is the editable copy that may be overridden.
@@ -511,7 +518,7 @@ class OfficePackage {
         if (formula && formulaText) value = `=${formulaText}`;
         const id = `xlsx:${sheetIndex}:${cellOrdinal}`;
         value = this.edits.get(id) ?? value;
-        cells.push({ id, part, ordinal: cellOrdinal, ref: cellMatch[2], type, formula, formulaText, value, text: original });
+        cells.push({ id, part, ordinal: cellOrdinal, ref: cellMatch[3], type, formula, formulaText, value, text: original });
         cellOrdinal += 1;
         if (cells.length >= 20000) break;
       }
@@ -590,13 +597,14 @@ class OfficePackage {
         let xml = await this.readText(sheet.part);
         let current = -1;
         let touched = false;
-        xml = xml.replace(/<c\b([^>]*)\br="([A-Z]+[0-9]+)"([^>]*)>([\s\S]*?)<\/c>/g, (all, left, ref, right, body) => {
+        xml = xml.replace(/<((?:[A-Za-z_][\w.-]*:)?c)\b([^>]*)\br="([A-Z]+[0-9]+)"([^>]*)>([\s\S]*?)<\/\1>/g, (all, cellTag, left, ref, right, body) => {
           current += 1;
           const id = sheet.cells.find((c) => c.ordinal === current)?.id;
           if (!id || !this.edits.has(id)) return all;
           const cell = sheet.cells.find((c) => c.id === id);
           touched = true;
           const value = this.edits.get(id);
+          const childPrefix = cellTag.includes(':') ? `${cellTag.split(':')[0]}:` : '';
           const attrs = `${left} r="${ref}"${right}`
             .replace(/\s+t="[^"]*"/g, '')
             .trim();
@@ -605,17 +613,17 @@ class OfficePackage {
             // the <f> content, and drop the cached <v> so the app recalculates.
             const fText = escapeXml(value.trim().slice(1));
             let inner;
-            if (/<f\b/.test(body)) {
+            if (/<(?:[A-Za-z_][\w.-]*:)?f\b/.test(body)) {
               inner = body
-                .replace(/<f\b[^>]*>[\s\S]*?<\/f>/, `<f>${fText}</f>`)
-                .replace(/<v\b[^>]*>[\s\S]*?<\/v>/g, '');
+                .replace(/<(?:[A-Za-z_][\w.-]*:)?f\b[^>]*>[\s\S]*?<\/(?:[A-Za-z_][\w.-]*:)?f>/, `<${childPrefix}f>${fText}</${childPrefix}f>`)
+                .replace(/<(?:[A-Za-z_][\w.-]*:)?v\b[^>]*>[\s\S]*?<\/(?:[A-Za-z_][\w.-]*:)?v>/g, '');
             } else {
-              inner = `<f>${fText}</f>`;
+              inner = `<${childPrefix}f>${fText}</${childPrefix}f>`;
             }
-            return `<c ${attrs} t="str">${inner}</c>`;
+            return `<${cellTag} ${attrs} t="str">${inner}</${cellTag}>`;
           }
           if (cell.type === 'n' && /^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/.test(value.trim())) {
-            return `<c ${attrs}><v>${escapeXml(value.trim())}</v></c>`;
+            return `<${cellTag} ${attrs}><${childPrefix}v>${escapeXml(value.trim())}</${childPrefix}v></${cellTag}>`;
           }
           if (cell.type === 's') {
             // Preserve the shared-string structure: append (or reuse) a shared
@@ -623,9 +631,9 @@ class OfficePackage {
             const idx = sharedStrings.indexOf(value);
             const useIdx = idx >= 0 ? idx : (sharedStrings.push(value), sharedStrings.length - 1);
             sharedDirty = true;
-            return `<c ${attrs} t="s"><v>${useIdx}</v></c>`;
+            return `<${cellTag} ${attrs} t="s"><${childPrefix}v>${useIdx}</${childPrefix}v></${cellTag}>`;
           }
-          return `<c ${attrs} t="inlineStr"><is><t${/^\s|\s$/.test(value) ? ' xml:space="preserve"' : ''}>${escapeXml(value)}</t></is></c>`;
+          return `<${cellTag} ${attrs} t="inlineStr"><${childPrefix}is><${childPrefix}t${/^\s|\s$/.test(value) ? ' xml:space="preserve"' : ''}>${escapeXml(value)}</${childPrefix}t></${childPrefix}is></${cellTag}>`;
         });
         if (touched) changed.set(sheet.part, xml);
       }
