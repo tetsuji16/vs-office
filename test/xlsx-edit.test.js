@@ -95,7 +95,32 @@ test('xlsx: edit a formula cell replaces the formula and drops cached value', as
   const rz = await JSZip.loadAsync(result.bytes, { checkCRC32: true });
   const out = await rz.file('xl/worksheets/sheet1.xml').async('string');
   assert.ok(out.includes('<f>A1+B1</f>'), 'formula replaced (XML-escaped ampersand is correct)');
+  assert.ok(/<c[^>]*r="C1"[^>]*t="str"/.test(out), 'existing string-result formula type is preserved');
   assert.ok(!/<v>/.test(out.split('r="C1"')[1].split('</c>')[0]), 'cached <v> dropped');
+});
+
+test('xlsx: editing a numeric formula does not force its result type to string', async () => {
+  const numericFormulaSheet = `<?xml version="1.0"?>
+<worksheet xmlns="x"><sheetData><row r="1">
+  <c r="A1" t="n"><f>1+1</f><v>2</v></c>
+</row></sheetData></worksheet>`;
+  const original = await makeZip({
+    '[Content_Types].xml': contentTypes,
+    'xl/workbook.xml': workbook,
+    'xl/_rels/workbook.xml.rels': rels,
+    'xl/worksheets/sheet1.xml': numericFormulaSheet,
+  });
+  const pkg = await OfficePackage.open('numeric-formula.xlsx', original);
+  const model = await pkg.createViewModel();
+  const a1 = model.sheets[0].cells.find((cell) => cell.ref === 'A1');
+  pkg.stageEdit({ id: a1.id, value: '=2*3' });
+  const result = await pkg.exportValidatedCopy();
+  const out = await (await JSZip.loadAsync(result.bytes, { checkCRC32: true }))
+    .file('xl/worksheets/sheet1.xml').async('string');
+  const cellXml = out.match(/<c\b[^>]*r="A1"[^>]*>[\s\S]*?<\/c>/)[0];
+  assert.ok(cellXml.includes('<f>2*3</f>'));
+  assert.ok(!/\bt="str"/.test(cellXml), 'numeric formula must not be serialized as a string result');
+  assert.ok(!/<v>/.test(cellXml), 'stale cached numeric value is removed');
 });
 
 test('xlsx: edit a number cell keeps numeric type and value', async () => {
@@ -181,4 +206,44 @@ test('xlsx: self-closing blank cells do not steal the next populated cell value'
   const reopened = await OfficePackage.open('self-closing.xlsx', result.bytes);
   const edited = (await reopened.createViewModel()).sheets[0].cells.find((cell) => cell.ref === 'B1');
   assert.equal(edited.text, 'new value', 'a self-closing blank cell can be edited and read back');
+});
+
+test('xlsx: editing one shared string preserves unrelated rich text and extensions', async () => {
+  const richSharedStrings = `<?xml version="1.0"?>
+<x:sst xmlns:x="x" count="2" uniqueCount="2">
+  <x:si><x:r><x:rPr><x:b/></x:rPr><x:t>Rich</x:t></x:r></x:si>
+  <x:si><x:t>Plain</x:t></x:si>
+  <x:extLst><x:ext uri="{must-survive}"/></x:extLst>
+</x:sst>`;
+  const sharedSheet = `<?xml version="1.0"?>
+<x:worksheet xmlns:x="x"><x:sheetData><x:row r="1">
+  <x:c r="A1" t="s"><x:v>0</x:v></x:c>
+  <x:c r="B1" t="s"><x:v>1</x:v></x:c>
+</x:row></x:sheetData></x:worksheet>`;
+  const original = await makeZip({
+    '[Content_Types].xml': contentTypes,
+    'xl/workbook.xml': workbook,
+    'xl/_rels/workbook.xml.rels': rels,
+    'xl/sharedStrings.xml': richSharedStrings,
+    'xl/worksheets/sheet1.xml': sharedSheet,
+  });
+  const pkg = await OfficePackage.open('rich-shared.xlsx', original);
+  const model = await pkg.createViewModel();
+  const b1 = model.sheets[0].cells.find((cell) => cell.ref === 'B1');
+  pkg.stageEdit({ id: b1.id, value: 'Changed' });
+  const result = await pkg.exportValidatedCopy();
+  const zip = await JSZip.loadAsync(result.bytes, { checkCRC32: true });
+  const sst = await zip.file('xl/sharedStrings.xml').async('string');
+
+  assert.ok(sst.includes('<x:rPr><x:b/></x:rPr>'), 'unrelated rich-text formatting survives byte-for-byte');
+  assert.ok(sst.includes('<x:ext uri="{must-survive}"/>'), 'unrelated extension metadata survives');
+  assert.match(sst, /count="2"/, 'cell usage count remains unchanged');
+  assert.match(sst, /uniqueCount="3"/, 'one appended unique string is counted');
+  assert.ok(sst.includes('<x:si><x:t>Changed</x:t></x:si>'), 'new entry uses the existing namespace prefix');
+  assert.ok(sst.indexOf('<x:si><x:t>Changed</x:t></x:si>') < sst.indexOf('<x:extLst>'), 'extLst remains the final SST child');
+
+  const reopened = await OfficePackage.open('rich-shared.xlsx', result.bytes);
+  const cells = Object.fromEntries((await reopened.createViewModel()).sheets[0].cells.map((cell) => [cell.ref, cell.text]));
+  assert.equal(cells.A1, 'Rich');
+  assert.equal(cells.B1, 'Changed');
 });
