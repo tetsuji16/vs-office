@@ -115,3 +115,32 @@ test('xlsx: edit a number cell keeps numeric type and value', async () => {
   const out = await rz.file('xl/worksheets/sheet1.xml').async('string');
   assert.ok(/<c[^>]*r="D1"[^>]*><v>99<\/v><\/c>/.test(out), 'numeric value preserved as <v>99</v>');
 });
+
+test('xlsx: reads and edits namespace-prefixed sheets with package-absolute relationship targets', async () => {
+  const prefixedWorkbook = '<x:workbook xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><x:sheets><x:sheet name="編集検証" sheetId="1" r:id="rId1"/></x:sheets></x:workbook>';
+  const absoluteRels = '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="/xl/worksheets/sheet1.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/></Relationships>';
+  const prefixedSheet = '<x:worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><x:sheetData><x:row r="1"><x:c r="A1" t="str"><x:v>Sample</x:v></x:c><x:c r="B1" t="n"><x:v>42</x:v></x:c><x:c r="C1" t="n"><x:f>B1*2</x:f><x:v>84</x:v></x:c></x:row></x:sheetData></x:worksheet>';
+  const original = await makeZip({
+    '[Content_Types].xml': contentTypes,
+    'xl/workbook.xml': prefixedWorkbook,
+    'xl/_rels/workbook.xml.rels': absoluteRels,
+    'xl/worksheets/sheet1.xml': prefixedSheet,
+  });
+  const pkg = await OfficePackage.open('prefixed.xlsx', original);
+  const model = await pkg.createViewModel();
+  assert.equal(model.sheets.length, 1);
+  assert.equal(model.sheets[0].name, '編集検証');
+  assert.equal(model.sheets[0].cells.find((cell) => cell.ref === 'B1').text, '42');
+  assert.equal(model.sheets[0].cells.find((cell) => cell.ref === 'C1').formulaText, 'B1*2');
+  const target = model.sheets[0].cells.find((cell) => cell.ref === 'B1');
+  const formulaTarget = model.sheets[0].cells.find((cell) => cell.ref === 'C1');
+  pkg.stageEdit({ id: target.id, value: '99' });
+  pkg.stageEdit({ id: formulaTarget.id, value: '=B1*3' });
+  const result = await pkg.exportValidatedCopy();
+  const reopened = await OfficePackage.open('prefixed.xlsx', result.bytes);
+  const reopenedModel = await reopened.createViewModel();
+  assert.equal(reopenedModel.sheets[0].cells.find((cell) => cell.ref === 'B1').text, '99');
+  assert.equal(reopenedModel.sheets[0].cells.find((cell) => cell.ref === 'C1').formulaText, 'B1*3');
+  const outputSheet = await (await JSZip.loadAsync(result.bytes, { checkCRC32: true })).file('xl/worksheets/sheet1.xml').async('string');
+  assert.ok(outputSheet.includes('<x:f>B1*3</x:f>'), 'formula edit preserves the source namespace prefix');
+});
