@@ -1,6 +1,6 @@
 # Change Log
 
-## Unreleased
+## 0.6.2
 
 - XLSX の名前空間接頭辞付き要素（`x:sheet`、`x:c`、`x:f` など）を読み書きできるように改善。
 - OPCで有効なパッケージ絶対Relationship Target（例: `/xl/worksheets/sheet1.xml`）を安全に解決し、実ファイルが0シートとして表示される問題を修正。
