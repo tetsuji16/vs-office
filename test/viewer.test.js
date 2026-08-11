@@ -72,13 +72,16 @@ test('viewer renders an XLSX grid and marks edited cells', () => {
   assert.ok(doc.querySelector('table'), 'xlsx grid not rendered');
   const inputs = Array.from(doc.querySelectorAll('td input'));
   assert.ok(inputs.some((i) => i.value === 'Hello'), 'cell value not rendered');
-  // Edited cell (C1: value !== text) shows the "編集済み" badge.
+  // Edited cell (C1: value !== text) shows a compact in-cell badge.
   const badges = Array.from(doc.querySelectorAll('.edited-badge')).map((b) => b.textContent);
-  assert.ok(badges.includes('編集済み'), 'edited badge not shown for changed cell');
+  assert.ok(badges.includes('変更'), 'edited badge not shown for changed cell');
   // Formula cell is no longer read-only: input is enabled and not .formula-cell.
   const formulaInput = Array.from(doc.querySelectorAll('td input')).find((i) => i.value === '=SUM(A1:A3)');
   assert.ok(formulaInput, 'formula value not rendered');
   assert.equal(formulaInput.disabled, false, 'formula cell should be editable now');
+  assert.equal(formulaInput.getAttribute('aria-label'), 'B1 数式');
+  assert.equal(doc.querySelector('#status').textContent, '未保存 1件');
+  assert.equal(doc.querySelector('#tabs').hidden, true, 'xlsx does not use preview/edit tabs');
 });
 
 test('viewer renders a DOCX paragraph outline with edited badge', () => {
@@ -162,13 +165,32 @@ test('viewer renders PPTX shapes as editable cards with colour/delete controls',
   assert.equal(colors.length, 2, 'fill + line colour inputs');
   assert.equal(colors[0].value, '#ff0000');
   assert.equal(colors[1].value, '#00ff00');
+  assert.deepEqual(Array.from(rows[0].querySelectorAll('.color-field span')).map((el) => el.textContent), ['塗り', '枠線']);
   const del = rows[0].querySelector('button');
   assert.equal(del.textContent, '削除');
   // Changing a colour should post a stage-edit with the :fill id.
   colors[0].value = '#123456';
   colors[0].dispatchEvent(new window.Event('change'));
   assert.ok(vscode.posted.some((m) => m.type === 'stage-edit' && m.edit.id === 'pptx:0:0:fill' && m.edit.value === '#123456'), 'fill edit not posted');
-  // Clicking delete should post a delete stage-edit.
+  // The first click only arms deletion; a second click posts the destructive edit.
+  del.dispatchEvent(new window.Event('click'));
+  assert.equal(del.textContent, '再クリック');
+  assert.ok(!vscode.posted.some((m) => m.type === 'stage-edit' && m.edit.id === 'pptx:0:0:delete'), 'first delete click must not stage deletion');
   del.dispatchEvent(new window.Event('click'));
   assert.ok(vscode.posted.some((m) => m.type === 'stage-edit' && m.edit.id === 'pptx:0:0:delete'), 'delete edit not posted');
+  assert.equal(doc.querySelector('#status').textContent, '編集可能');
+});
+
+test('viewer labels editable and read-only states accurately', () => {
+  const editable = setupViewer({
+    kind: 'xlsx', filename: 'editable.xlsx', canEdit: true, editCount: 0,
+    sheets: [{ name: 'Sheet1', cells: [] }],
+  }).window.document;
+  assert.equal(editable.querySelector('#status').textContent, '編集可能');
+
+  const readOnly = setupViewer({
+    kind: 'xlsx', filename: 'readonly.xlsx', canEdit: false, editBlockReason: '署名付き', editCount: 0,
+    sheets: [{ name: 'Sheet1', cells: [] }],
+  }).window.document;
+  assert.equal(readOnly.querySelector('#status').textContent, '閲覧のみ');
 });

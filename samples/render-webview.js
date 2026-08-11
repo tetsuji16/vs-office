@@ -50,8 +50,9 @@ function htmlFor(kind) {
   <script nonce="${token}">${jszipSrc}</script>
   <script nonce="${token}">${docxPreviewSrc}</script>
   <script nonce="${token}">
+    window.__posted = [];
     window.acquireVsCodeApi = function () {
-      return { postMessage: function () {}, getState: function () { return undefined; }, setState: function () {} };
+      return { postMessage: function (message) { window.__posted.push(message); }, getState: function () { return undefined; }, setState: function () {} };
     };
   </script>
   <script nonce="${token}">${viewerJs}</script>
@@ -84,6 +85,12 @@ function htmlFor(kind) {
       }, bytes);
     }
     await page.waitForTimeout(1500);
+    const statusText = await page.locator('#status').textContent();
+    if (statusText !== '編集可能') throw new Error(`${kind}: unexpected editable status: ${statusText}`);
+    const tabsVisible = await page.locator('#tabs').isVisible();
+    if (kind === 'xlsx' ? tabsVisible : !tabsVisible) {
+      throw new Error(`${kind}: tab visibility does not match the active file type`);
+    }
     const out = path.join(ROOT, 'samples', `render-${kind}.png`);
     await page.screenshot({ path: out, fullPage: true });
     console.log('captured', out);
@@ -98,6 +105,19 @@ function htmlFor(kind) {
       const outEdit = path.join(ROOT, 'samples', `render-${kind}-edit.png`);
       await page.screenshot({ path: outEdit, fullPage: true });
       console.log('captured', outEdit);
+
+      if (kind === 'pptx') {
+        const labels = await page.locator('.color-field span').allTextContents();
+        if (!labels.includes('塗り') || !labels.includes('枠線')) throw new Error('pptx: visible colour labels missing');
+        const deleteButton = page.locator('.shape-row button').first();
+        await deleteButton.click();
+        if ((await deleteButton.textContent()) !== '再クリック') throw new Error('pptx: delete confirmation was not armed');
+        const stagedAfterFirstClick = await page.evaluate(() => window.__posted.some((message) => message?.edit?.id?.endsWith(':delete')));
+        if (stagedAfterFirstClick) throw new Error('pptx: first delete click staged a destructive edit');
+        const outConfirm = path.join(ROOT, 'samples', 'render-pptx-delete-confirm.png');
+        await page.screenshot({ path: outConfirm, fullPage: true });
+        console.log('captured', outConfirm);
+      }
     }
 
     // DOM assertions for key correctness signals.
@@ -110,7 +130,25 @@ function htmlFor(kind) {
       const cellValues = await page.evaluate(() =>
         Array.from(document.querySelectorAll('td input')).map((i) => i.value));
       console.log('xlsx cell values:', JSON.stringify(cellValues));
+      const badgeContained = await page.evaluate(() => {
+        const badge = document.querySelector('td .cell-badge.formula');
+        if (!badge) return false;
+        const cell = badge.closest('td');
+        const badgeRect = badge.getBoundingClientRect();
+        const cellRect = cell.getBoundingClientRect();
+        return badgeRect.left >= cellRect.left && badgeRect.right <= cellRect.right
+          && badgeRect.top >= cellRect.top && badgeRect.bottom <= cellRect.bottom;
+      });
+      if (!badgeContained) throw new Error('xlsx: formula badge is clipped or outside its cell');
     }
+
+    await page.setViewportSize({ width: 560, height: 900 });
+    const pageOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+    if (pageOverflow) throw new Error(`${kind}: narrow viewport causes page-level horizontal overflow`);
+    const narrowOut = path.join(ROOT, 'samples', `render-${kind}-narrow.png`);
+    await page.screenshot({ path: narrowOut, fullPage: true });
+    console.log('captured', narrowOut);
+    await page.setViewportSize({ width: 1280, height: 1600 });
   }
   if (errors.length) {
     console.log('--- console/page errors ---');

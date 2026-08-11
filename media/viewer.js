@@ -39,6 +39,7 @@
     row.appendChild(text('span', label, 'row-label'));
     const input = document.createElement('input');
     input.value = item.value;
+    input.setAttribute('aria-label', `${label} ${item.formula ? '数式' : '値'}`);
     input.disabled = !model.canEdit || item.formula;
     const edited = !item.formula && item.value !== item.text;
     if (edited) {
@@ -66,7 +67,11 @@
 
   function renderCommon() {
     filename.textContent = model.filename;
-    status.textContent = model.editCount ? `未保存 ${model.editCount}件` : '閲覧モード';
+    status.textContent = model.editCount
+      ? `未保存 ${model.editCount}件`
+      : model.canEdit
+        ? '編集可能'
+        : '閲覧のみ';
     status.className = model.editCount ? 'badge changed' : 'badge';
     saveButton.disabled = !model.editCount || !model.canEdit;
     saveAsButton.disabled = !model.editCount || !model.canEdit;
@@ -99,6 +104,7 @@
     row.appendChild(text('span', label, 'row-label'));
     const input = document.createElement('input');
     input.value = para.value;
+    input.setAttribute('aria-label', `${label} 段落`);
     const edited = para.value !== para.text;
     if (edited) {
       row.classList.add('edited');
@@ -154,6 +160,7 @@
     textInput.disabled = !model.canEdit;
     textInput.placeholder = '図形テキスト';
     textInput.title = '図形のテキスト';
+    textInput.setAttribute('aria-label', '図形テキスト');
     textInput.addEventListener('change', () => {
       if (textInput.value !== shape.text) vscode.postMessage({ type: 'stage-edit', edit: { id: `${shape.id}:text`, value: textInput.value } });
     });
@@ -164,19 +171,46 @@
     fill.disabled = !model.canEdit;
     fill.title = `塗りつぶし色 (元: ${shape.fillColor || 'なし'})`;
     fill.addEventListener('change', () => vscode.postMessage({ type: 'stage-edit', edit: { id: `${shape.id}:fill`, value: fill.value } }));
-    card.appendChild(fill);
+    fill.setAttribute('aria-label', '塗りつぶし色');
+    const fillField = document.createElement('label');
+    fillField.className = 'color-field';
+    fillField.append(text('span', '塗り'), fill);
+    card.appendChild(fillField);
     const line = document.createElement('input');
     line.type = 'color';
     line.value = shape.lineValue || '#000000';
     line.disabled = !model.canEdit;
     line.title = `枠線色 (元: ${shape.lineColor || 'なし'})`;
     line.addEventListener('change', () => vscode.postMessage({ type: 'stage-edit', edit: { id: `${shape.id}:line`, value: line.value } }));
-    card.appendChild(line);
+    line.setAttribute('aria-label', '枠線色');
+    const lineField = document.createElement('label');
+    lineField.className = 'color-field';
+    lineField.append(text('span', '枠線'), line);
+    card.appendChild(lineField);
     const del = document.createElement('button');
     del.textContent = '削除';
     del.disabled = !model.canEdit;
-    del.title = 'この図形を削除';
-    del.addEventListener('click', () => vscode.postMessage({ type: 'stage-edit', edit: { id: `${shape.id}:delete`, value: '' } }));
+    del.title = '誤操作防止のため2回クリックで削除をステージします';
+    del.setAttribute('aria-label', '図形を削除（確認が必要）');
+    let deleteArmed = false;
+    const resetDelete = () => {
+      deleteArmed = false;
+      del.textContent = '削除';
+      del.classList.remove('armed');
+      del.setAttribute('aria-label', '図形を削除（確認が必要）');
+    };
+    del.addEventListener('blur', resetDelete);
+    del.addEventListener('click', () => {
+      if (!deleteArmed) {
+        deleteArmed = true;
+        del.textContent = '再クリック';
+        del.classList.add('armed');
+        del.setAttribute('aria-label', '図形の削除を確定');
+        return;
+      }
+      vscode.postMessage({ type: 'stage-edit', edit: { id: `${shape.id}:delete`, value: '' } });
+      resetDelete();
+    });
     card.appendChild(del);
     return card;
   }
@@ -184,7 +218,7 @@
   function renderPptx() {
     preview.innerHTML = '';
     outline.innerHTML = '';
-    const intro = text('p', '本格的な図形編集ビューです。各図形のテキスト・塗りつぶし色・枠線色を直接編集でき、図形ごと削除も可能です。テーマ・マスター・アニメーション・画像は変更せず、編集した図形の内部マークアップのみ書き換えます。「プレビュー」タブがスライド内テキストの視覚的プレビュー、「安全編集」タブが図形ごとの編集フィールドです。', 'muted');
+    const intro = text('p', 'スライド内テキストの構造プレビューです。実際の位置・フォント・画像はPowerPointと異なる場合があります。「安全編集」では図形テキスト、塗りつぶし色、枠線色を変更できます。テーマ・マスター・アニメーション・画像は変更しません。', 'muted');
     preview.appendChild(intro);
     const deck = document.createElement('div');
     deck.className = 'slides';
@@ -268,6 +302,7 @@
           if (item) {
             const input = document.createElement('input');
             input.value = item.value;
+            input.setAttribute('aria-label', `${item.ref} ${item.formula ? '数式' : 'セル値'}`);
             const edited = !item.formula && item.value !== item.text;
             if (edited) {
               input.classList.add('edited-input');
@@ -282,8 +317,8 @@
               if (input.value !== item.value) vscode.postMessage({ type: 'stage-edit', edit: { id: item.id, value: input.value } });
             });
             td.appendChild(input);
-            if (item.formula) td.appendChild(text('span', 'ƒx', 'formula'));
-            else if (edited) td.appendChild(text('span', '編集済み', 'edited-badge'));
+            if (item.formula) td.appendChild(text('span', 'ƒx', 'formula cell-badge'));
+            else if (edited) td.appendChild(text('span', '変更', 'edited-badge cell-badge'));
           }
           tr.appendChild(td);
         }
