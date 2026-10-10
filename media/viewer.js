@@ -74,7 +74,7 @@
         : '閲覧のみ';
     status.className = model.editCount ? 'badge changed' : 'badge';
     saveButton.disabled = !model.editCount || !model.canEdit;
-    saveAsButton.disabled = !model.editCount || !model.canEdit;
+    saveAsButton.disabled = false;
     discardButton.disabled = !model.editCount;
     notice.innerHTML = '';
     const message = model.canEdit
@@ -110,7 +110,7 @@
       row.classList.add('edited');
       input.classList.add('edited-input');
     }
-    input.disabled = !model.canEdit;
+    input.disabled = !model.canEdit || para.tIds.length === 0;
     input.title = edited
       ? `変更前: ${para.text}\n変更後: ${para.value}`
       : 'Enterで変更をステージします';
@@ -120,7 +120,7 @@
       }
     });
     input.addEventListener('change', () => {
-      if (input.value !== para.text) vscode.postMessage({ type: 'stage-edit', edit: { id: para.id, value: input.value } });
+      if (input.value !== para.value) vscode.postMessage({ type: 'stage-edit', edit: { id: para.id, value: input.value } });
     });
     row.appendChild(input);
     if (edited) row.appendChild(text('span', '編集済み', 'edited-badge'));
@@ -157,12 +157,12 @@
     card.className = 'edit-row shape-row';
     const textInput = document.createElement('input');
     textInput.value = shape.value;
-    textInput.disabled = !model.canEdit;
+    textInput.disabled = !model.canEdit || shape.tIds?.length === 0;
     textInput.placeholder = '図形テキスト';
     textInput.title = '図形のテキスト';
     textInput.setAttribute('aria-label', '図形テキスト');
     textInput.addEventListener('change', () => {
-      if (textInput.value !== shape.text) vscode.postMessage({ type: 'stage-edit', edit: { id: `${shape.id}:text`, value: textInput.value } });
+      if (textInput.value !== shape.value) vscode.postMessage({ type: 'stage-edit', edit: { id: `${shape.id}:text`, value: textInput.value } });
     });
     card.appendChild(textInput);
     const fill = document.createElement('input');

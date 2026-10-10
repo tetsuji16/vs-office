@@ -3,7 +3,7 @@
   "displayName": "VS Office - Lightweight Editor",
   "icon": "assets/vs-office-icon.png",
   "description": "Review and make focused edits to DOCX, PPTX and XLSX files in VS Code with conservative OOXML saving.",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "publisher": "tetsuji16",
   "license": "MIT",
   "sponsor": {
@@ -86,7 +86,7 @@
     "package": "node esbuild.js --production",
     "vsce": "npm exec --yes --package=@vscode/vsce@3.9.2 --loglevel=error -- vsce",
     "test": "node --test",
-    "check": "node --check extension.js && node --check src/office-package.js && node --check esbuild.js"
+    "check": "node --check extension.js && node --check src/office-package.js && node --check esbuild.js && node --check media/viewer.js"
   },
   "dependencies": {
     "docx-preview": "^0.3.7",

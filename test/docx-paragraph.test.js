@@ -20,7 +20,7 @@ test('splitProportional distributes text across runs by original length', () => 
   assert.deepEqual(splitProportional('HELLO', [3, 2]), ['HEL', 'LO']);
   assert.deepEqual(splitProportional('Hi', [3, 2]), ['H', 'i']);
   assert.deepEqual(splitProportional('', [3, 2]), ['', '']);
-  assert.deepEqual(splitProportional('xyz', [0, 0]), ['', '']);
+  assert.deepEqual(splitProportional('xyz', [0, 0]), ['xyz', '']);
   // a single run keeps every character
   assert.deepEqual(splitProportional('entire paragraph text', [21]), ['entire paragraph text']);
   // long text overflowing the ratio rounds sensibly and the last run absorbs the remainder
@@ -109,4 +109,35 @@ test('paragraph edit and individual w:t edit can coexist on different paragraphs
   const reModel = await (await OfficePackage.open('sample.docx', result.bytes)).createViewModel();
   assert.equal(reModel.paragraphs[0].text, 'Premier');
   assert.equal(reModel.paragraphs[1].text, 'Deuxième');
+});
+
+
+test('DOCX paragraph save retains supplementary Unicode characters across formatted runs', async () => {
+  const original = await makeZip({
+    '[Content_Types].xml': contentTypes,
+    'word/document.xml': '<w:document xmlns:w="w"><w:body><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>A</w:t></w:r><w:r><w:t>B</w:t></w:r></w:p></w:body></w:document>',
+  });
+  const pkg = await OfficePackage.open('unicode.docx', original);
+  pkg.stageEdit({ id: 'docx:p0', value: '😀𠮷' });
+  const result = await pkg.exportValidatedCopy();
+  const model = await (await OfficePackage.open('unicode.docx', result.bytes)).createViewModel();
+  assert.equal(model.paragraphs[0].text, '😀𠮷');
+});
+
+test('DOCX existing empty runs accept text while paragraphs without runs reject edits', async () => {
+  const original = await makeZip({
+    '[Content_Types].xml': contentTypes,
+    'word/document.xml': '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t></w:t></w:r></w:p><w:p/></w:body></w:document>',
+  });
+  const pkg = await OfficePackage.open('empty.docx', original);
+  pkg.stageEdit({ id: 'docx:p0', value: 'New text' });
+  const result = await pkg.exportValidatedCopy();
+  assert.equal((await (await OfficePackage.open('empty.docx', result.bytes)).createViewModel()).paragraphs[0].text, 'New text');
+  const blank = await makeZip({
+    '[Content_Types].xml': contentTypes,
+    'word/document.xml': '<w:document xmlns:w="w"><w:body><w:p><w:r/></w:p></w:body></w:document>',
+  });
+  const noRuns = await OfficePackage.open('blank.docx', blank);
+  noRuns.stageEdit({ id: 'docx:p0', value: 'Cannot insert' });
+  await assert.rejects(noRuns.exportValidatedCopy(), /既存のテキストがない段落/);
 });

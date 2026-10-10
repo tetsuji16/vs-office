@@ -194,3 +194,32 @@ test('viewer labels editable and read-only states accurately', () => {
   }).window.document;
   assert.equal(readOnly.querySelector('#status').textContent, '閲覧のみ');
 });
+
+
+test('viewer allows unchanged Save As and reverting edited paragraph and shape text', () => {
+  const docx = setupViewer({
+    kind: 'docx', filename: 'edit.docx', canEdit: true, editCount: 1,
+    paragraphs: [{ id: 'docx:p0', text: 'Original', value: 'Changed', tIds: ['docx:0'] }],
+  });
+  const input = docx.window.document.querySelector('#outline input');
+  input.value = 'Original';
+  input.dispatchEvent(new docx.window.Event('change'));
+  assert.ok(docx.vscode.posted.some((m) => m.edit?.value === 'Original'));
+
+  const pptx = setupViewer({
+    kind: 'pptx', filename: 'edit.pptx', canEdit: true, editCount: 1,
+    slides: [{ number: 1, imageCount: 0, items: [], shapes: [{
+      id: 'pptx:0:0', text: 'Original', value: 'Changed', tIds: ['pptx:0:0'],
+    }] }],
+  });
+  const shapeInput = pptx.window.document.querySelector('.shape-row input');
+  shapeInput.value = 'Original';
+  shapeInput.dispatchEvent(new pptx.window.Event('change'));
+  assert.ok(pptx.vscode.posted.some((m) => m.edit?.value === 'Original'));
+
+  const unchanged = setupViewer({
+    kind: 'xlsx', filename: 'copy.xlsx', canEdit: true, editCount: 0,
+    sheets: [{ name: 'Sheet1', cells: [] }],
+  });
+  assert.equal(unchanged.window.document.querySelector('#saveAs').disabled, false);
+});

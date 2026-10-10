@@ -22,7 +22,7 @@ VS Office is designed for quick reviews and small corrections in `.docx`, `.pptx
 | --- | --- | --- |
 | DOCX | Page preview powered by `docx-preview`, plus an editable paragraph outline | Existing `w:t` text runs, re-fanned across runs to preserve bold/italic formatting |
 | PPTX | Visual preview of each slide's text plus a per-shape editing card | Per-shape text, solid-fill colour, line colour, and shape deletion — themes, masters, animations, and images are left untouched |
-| XLSX | Spreadsheet grid of up to 200 rows by 50 columns | Any cell, including formulas (edited as `=...` and rewritten into `<f>`) |
+| XLSX | Spreadsheet grid of up to 200 rows by 50 columns | Existing cells within the visible grid, including formulas (edited as `=...` and rewritten into `<f>`) |
 
 ## Save protection
 
@@ -41,7 +41,11 @@ Digitally signed and encrypted packages open in read-only mode.
 1. Install **VS Office - Lightweight Editor** from the Visual Studio Marketplace.
 2. Open a `.docx`, `.pptx`, or `.xlsx` file in Visual Studio Code.
 3. Review the preview or grid and edit a supported text or cell value.
-4. Press `Ctrl+S` to save, or use **Save As** to create a separate file.
+4. Press `Ctrl+S` to save, or use **Save As** to create a separate file. Save As also works without edits and retains the original bytes in that case. Keep the same file extension; format conversion is not supported.
+
+VS Code recovery backups retain pending edits across a crash or window reload. Recovered files still check the original disk content before overwriting. DOCX page previews refresh after saving or reverting; pending edits are shown in the editable outline.
+
+Only existing text runs and spreadsheet cells can be edited. Adding new paragraphs, text to shapes without text runs, or new spreadsheet cells is not supported.
 
 Automatic backups are enabled by default. Change `vsOffice.createBackupOnSave` in Visual Studio Code Settings if required.
 

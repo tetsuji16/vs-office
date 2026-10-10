@@ -36,13 +36,25 @@ class VsOfficeProvider {
     this.onDidChangeCustomDocument = this.changeEmitter.event;
   }
 
-  async openCustomDocument(uri) {
-    const stat = await vscode.workspace.fs.stat(uri);
-    if (stat.size > MAX_FILE_BYTES) {
+  async openCustomDocument(uri, openContext = {}) {
+    const source = openContext.backupId ? vscode.Uri.parse(openContext.backupId) : uri;
+    const stat = await vscode.workspace.fs.stat(source);
+    if (stat.size > (openContext.backupId ? MAX_FILE_BYTES * 2 : MAX_FILE_BYTES)) {
       throw new OfficePackageError(`安全のため ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB を超えるファイルは開きません。`);
     }
-    const bytes = await vscode.workspace.fs.readFile(uri);
+    let bytes = await vscode.workspace.fs.readFile(source);
+    let edits = [];
+    if (openContext.backupId && bytes[0] === 123) {
+      const snapshot = JSON.parse(Buffer.from(bytes).toString('utf8'));
+      if (snapshot.version !== 1 || typeof snapshot.original !== 'string' || !Array.isArray(snapshot.edits)) {
+        throw new OfficePackageError('バックアップの形式が不正です。');
+      }
+      bytes = Buffer.from(snapshot.original, 'base64');
+      edits = snapshot.edits;
+    }
+    if (bytes.length > MAX_FILE_BYTES) throw new OfficePackageError('ファイルサイズが安全上限を超えています。');
     const pkg = await OfficePackage.open(uri.fsPath, bytes);
+    for (const edit of edits) pkg.stageEdit(edit);
     return new VsOfficeDocument(uri, pkg);
   }
 
@@ -137,10 +149,15 @@ class VsOfficeProvider {
   }
 
   async backupCustomDocument(document, context) {
-    const result = document.officePackage.hasEdits()
-      ? await document.officePackage.exportValidatedCopy()
-      : { bytes: document.officePackage.originalBytes };
-    await vscode.workspace.fs.writeFile(context.destination, result.bytes);
+    // Preserve the disk baseline and pending edits separately, so restoring
+    // a backup still detects external changes and can save the recovered edits.
+    const pkg = document.officePackage;
+    const snapshot = {
+      version: 1,
+      original: pkg.originalBytes.toString('base64'),
+      edits: Array.from(pkg.edits, ([id, value]) => ({ id, value })),
+    };
+    await vscode.workspace.fs.writeFile(context.destination, Buffer.from(JSON.stringify(snapshot)));
     return {
       id: context.destination.toString(),
       delete: () => vscode.workspace.fs.delete(context.destination).then(undefined, () => undefined),
@@ -150,19 +167,32 @@ class VsOfficeProvider {
   async sendDocument(document) {
     const model = await document.officePackage.createViewModel();
     await Promise.all(Array.from(document.webviews, (webview) => webview.postMessage({ type: 'model', model })));
+    if (model.kind === 'docx') {
+      const source = document.officePackage.originalBytes;
+      await Promise.all(Array.from(document.webviews, (webview) => webview.postMessage({
+        type: 'docx-bytes',
+        bytes: source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength),
+      })));
+    }
   }
 
   async writeValidated(document, target, overwriteOriginal) {
     const pkg = document.officePackage;
-    if (!pkg.hasEdits()) {
+    if (!pkg.hasEdits() && overwriteOriginal) {
       vscode.window.showInformationMessage('変更はありません。');
       return;
     }
-    if (!pkg.canEdit) {
+    if (pkg.hasEdits() && !pkg.canEdit) {
       throw new OfficePackageError(pkg.editBlockReason || 'このファイルは安全編集できません。');
     }
 
-    const result = await pkg.exportValidatedCopy();
+    if (path.extname(target.fsPath).toLowerCase() !== `.${pkg.kind}`) {
+      throw new OfficePackageError(`保存先の拡張子は .${pkg.kind} にしてください。形式の変換には対応していません。`);
+    }
+    const result = pkg.hasEdits() ? await pkg.exportValidatedCopy() : {
+      bytes: pkg.originalBytes,
+      report: { changedParts: [], untouchedPartsVerified: pkg.entryHashes.size, zipCrcVerified: true },
+    };
     const parsed = path.parse(target.fsPath);
     const temp = vscode.Uri.file(path.join(parsed.dir, `.${parsed.base}.${crypto.randomUUID()}.tmp`));
     let backup;

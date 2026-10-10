@@ -100,20 +100,23 @@ function collectTextNodes(xml, tagName, part, prefix) {
 /**
  * Distribute `text` across `lengths` runs, proportional to each run's original
  * length, so that formatting on every run is preserved. The final run absorbs
- * any rounding remainder. Empty runs stay empty.
+ * any rounding remainder. When all existing runs are empty, use the first run.
  */
 function splitProportional(text, lengths) {
   if (lengths.length === 0) return [];
   const total = lengths.reduce((a, b) => a + b, 0);
-  if (total === 0) return lengths.map(() => '');
-  const n = text.length;
+  if (total === 0) return lengths.map((_, i) => i === 0 ? text : '');
+  // Slice code points rather than UTF-16 units: splitting a surrogate pair
+  // would cause escapeXml to strip both halves from the saved runs.
+  const points = Array.from(text);
+  const n = points.length;
   let allocated = 0;
   return lengths.map((len, i) => {
-    if (i === lengths.length - 1) return text.slice(allocated);
+    if (i === lengths.length - 1) return points.slice(allocated).join('');
     const share = Math.max(0, Math.round((n * len) / total));
-    const slice = text.slice(allocated, allocated + share);
+    const slice = points.slice(allocated, allocated + share);
     allocated += slice.length;
-    return slice;
+    return slice.join('');
   });
 }
 
@@ -715,6 +718,12 @@ class OfficePackage {
     const validIds = new Set();
     if (model.items) for (const item of model.items) validIds.add(item.id);
     if (model.paragraphs) for (const p of model.paragraphs) validIds.add(p.id);
+    if (model.paragraphs?.some((p) => this.edits.has(p.id) && p.tIds.length === 0)) {
+      throw new OfficePackageError('既存のテキストがない段落には入力できません。');
+    }
+    if (model.slides?.some((s) => s.shapes.some((shape) => this.edits.has(`${shape.id}:text`) && shape.tIds.length === 0))) {
+      throw new OfficePackageError('既存のテキストがない図形には入力できません。');
+    }
     if (model.slides) {
       for (const s of model.slides) {
         for (const item of s.items) validIds.add(item.id);
