@@ -223,3 +223,26 @@ test('viewer allows unchanged Save As and reverting edited paragraph and shape t
   });
   assert.equal(unchanged.window.document.querySelector('#saveAs').disabled, false);
 });
+
+test('viewer redraws the DOCX preview only when new source bytes arrive', () => {
+  const model = {
+    kind: 'docx',
+    filename: 'doc.docx',
+    canEdit: true,
+    editCount: 0,
+    paragraphs: [{ id: 'docx:p0', text: 'Text', value: 'Text', tIds: ['docx:0'], tLengths: [4] }],
+    summary: '1 段落',
+  };
+  const { window } = setupViewer(model);
+  let renders = 0;
+  window.docx = { async renderAsync() { renders += 1; } };
+  const send = (data) => window.dispatchEvent(new window.MessageEvent('message', { data }));
+
+  send({ type: 'docx-bytes', bytes: new Uint8Array([1, 2, 3]).buffer });
+  assert.equal(renders, 1);
+  send({ type: 'model', model: { ...model, editCount: 1 } });
+  send({ type: 'model', model: { ...model, editCount: 2 } });
+  assert.equal(renders, 1, 'staged edits keep the existing preview');
+  send({ type: 'docx-bytes', bytes: new Uint8Array([4, 5, 6]).buffer });
+  assert.equal(renders, 2, 'a new baseline (save/revert) redraws the preview');
+});

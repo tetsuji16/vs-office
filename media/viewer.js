@@ -3,6 +3,8 @@
   const vscode = acquireVsCodeApi();
   let model = null;
   let docxBytes = null;
+  // Bytes the preview was last drawn from; undefined forces the first draw.
+  let renderedDocxBytes;
 
   const $ = (selector) => document.querySelector(selector);
   const filename = $('#filename');
@@ -95,7 +97,8 @@
     list.className = 'edit-list';
     model.paragraphs.forEach((para, i) => list.appendChild(editParagraph(para, `#${i + 1}`)));
     outline.appendChild(list);
-    renderDocxPreview();
+    // Staged edits do not change the source bytes, so keep the existing preview.
+    if (docxBytes !== renderedDocxBytes) renderDocxPreview();
   }
 
   function editParagraph(para, label) {
@@ -130,9 +133,11 @@
   async function renderDocxPreview() {
     preview.innerHTML = '';
     if (!docxBytes || !window.docx?.renderAsync) {
+      renderedDocxBytes = undefined;
       preview.appendChild(text('p', '高忠実度プレビューを準備中です…', 'muted'));
       return;
     }
+    renderedDocxBytes = docxBytes;
     const container = document.createElement('div');
     container.className = 'docx-container';
     preview.appendChild(container);

@@ -86,10 +86,10 @@ class VsOfficeProvider {
     const token = nonce();
     webview.html = this.html(webview, scriptUri, styleUri, jszipUri, docxPreviewUri, token);
 
-    const sendModel = async () => {
+    const sendModel = async ({ docxBytes = true } = {}) => {
       const model = await document.officePackage.createViewModel();
       await webview.postMessage({ type: 'model', model });
-      if (model.kind === 'docx') {
+      if (docxBytes && model.kind === 'docx') {
         const source = document.officePackage.originalBytes;
         await webview.postMessage({
           type: 'docx-bytes',
@@ -112,14 +112,15 @@ class VsOfficeProvider {
             undo: async () => {
               if (hadPrevious) document.officePackage.stageEdit({ id: message.edit.id, value: previous });
               else document.officePackage.unstageEdit(message.edit.id);
-              await this.sendDocument(document);
+              await this.sendDocument(document, { docxBytes: false });
             },
             redo: async () => {
               document.officePackage.stageEdit(message.edit);
-              await this.sendDocument(document);
+              await this.sendDocument(document, { docxBytes: false });
             },
           });
-          await sendModel();
+          // Staged edits never change the DOCX baseline, so skip resending it.
+          await sendModel({ docxBytes: false });
         } else if (message.type === 'discard') {
           await vscode.commands.executeCommand('workbench.action.files.revert');
         } else if (message.type === 'save') {
@@ -164,10 +165,10 @@ class VsOfficeProvider {
     };
   }
 
-  async sendDocument(document) {
+  async sendDocument(document, { docxBytes = true } = {}) {
     const model = await document.officePackage.createViewModel();
     await Promise.all(Array.from(document.webviews, (webview) => webview.postMessage({ type: 'model', model })));
-    if (model.kind === 'docx') {
+    if (docxBytes && model.kind === 'docx') {
       const source = document.officePackage.originalBytes;
       await Promise.all(Array.from(document.webviews, (webview) => webview.postMessage({
         type: 'docx-bytes',

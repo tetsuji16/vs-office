@@ -107,3 +107,16 @@ test('sendDocument refreshes webview DOCX bytes from the package baseline', asyn
   assert.deepEqual(Buffer.from(payload.bytes), original);
   assert.ok(messages.some((message) => message.type === 'model' && message.model.kind === 'docx'));
 });
+
+test('sendDocument can skip DOCX bytes for staged-edit refreshes', async () => {
+  const original = await makeDocx();
+  const source = path.resolve('/docs/edit.docx');
+  const h = harness({ [source]: original });
+  const document = await h.provider.openCustomDocument(h.uri(source));
+  const messages = [];
+  document.webviews.add({ async postMessage(message) { messages.push(message); } });
+
+  await h.provider.sendDocument(document, { docxBytes: false });
+  assert.ok(messages.some((message) => message.type === 'model'));
+  assert.equal(messages.some((message) => message.type === 'docx-bytes'), false);
+});
